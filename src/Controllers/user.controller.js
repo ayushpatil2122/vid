@@ -15,10 +15,20 @@ const generateJwt = (user) => {
 
 const registerUser = async (req, res, next) => {
   try {
-    const { firstname, lastname, email, password, country } = req.body;
+    const { firstname, lastname, email, password, country, role } = req.body;
 
-    if (!firstname || !lastname || !email || !password || !country) {
-      return next(new ApiError(400, "All fields (firstname, lastname, email, password, country) are required"));
+    console.log("Received registration data:", req.body); // Debug payload
+
+    // Check all required fields, including role
+    if (!firstname || !lastname || !email || !password || !country || !role) {
+      console.log("Missing fields:", { firstname, lastname, email, password, country, role }); // Debug which field is missing
+      return next(new ApiError(400, "All fields (firstname, lastname, email, password, country, role) are required"));
+    }
+
+    // Validate role against enum
+    const validRoles = ['FREELANCER', 'CLIENT', 'ADMIN'];
+    if (!validRoles.includes(role)) {
+      return next(new ApiError(400, `Invalid role. Must be one of: ${validRoles.join(', ')}`));
     }
 
     const existingUser = await prisma.user.findUnique({ where: { email } });
@@ -39,6 +49,7 @@ const registerUser = async (req, res, next) => {
         email,
         password: hashedPassword,
         country,
+        role, // Now correctly passed
       },
     });
 
@@ -54,11 +65,10 @@ const registerUser = async (req, res, next) => {
 
     return res.status(201).json(new ApiResponse(201, { user: userResponse, token }, "User registered successfully"));
   } catch (error) {
-    console.error("Error registering user:", error);
+    console.error("Error registering user:", error.message, error.stack); // Enhanced logging
     return next(new ApiError(500, "Failed to register user", error.message));
   }
 };
-
 const loginUser = async (req, res, next) => {
   try {
     const { email, password } = req.body;
@@ -160,40 +170,40 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+// src/Controllers/user.controller.js (getUserProfile)
+// src/Controllers/user.controller.js (getUserProfile)
 const getUserProfile = async (req, res, next) => {
   try {
+    console.log("getUserProfile: req.user:", req.user); // Debug
     if (!req.user || !req.user.id) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      console.log("getUserProfile: No user ID from token");
+      return next(new ApiError(401, "Unauthorized: No user ID provided"));
     }
-    const userId = req.user.id;
 
+    const userId = req.user.id;
     const user = await prisma.user.findUnique({
       where: { id: userId },
-      select: {
-        id: true,
-        firstname: true,
-        lastname: true,
-        email: true,
-        country: true,
-        username: true,
-        role: true,
-        profilePicture: true,
-        bio: true,
-        createdAt: true,
-        updatedAt: true,
-        isActive: true,
-        freelancerProfile: { select: { id: true, jobTitle: true, rating: true } }, // Optional: Include basic freelancer profile
-      },
     });
+
+    console.log("getUserProfile: Queried user:", user); // Debug
 
     if (!user || !user.isActive) {
       return next(new ApiError(404, "User not found or account is deactivated"));
     }
 
-    return res.status(200).json(new ApiResponse(200, user, "User profile retrieved successfully"));
+    const userResponse = {
+      id: user.id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email,
+      country: user.country,
+      role: user.role,
+    };
+
+    return res.status(200).json(new ApiResponse(200, userResponse, "User profile fetched successfully"));
   } catch (error) {
-    console.error("Error retrieving user profile:", error);
-    return next(new ApiError(500, "Failed to retrieve user profile", error.message));
+    console.error("Error fetching user profile:", error.message, error.stack);
+    return next(new ApiError(500, "Failed to fetch user profile", error.message));
   }
 };
 
@@ -226,43 +236,43 @@ const deleteUser = async (req, res, next) => {
 };
 
 // Bonus: Get public user profile (e.g., for freelancer visibility)
-const getPublicUserProfile = async (req, res, next) => {
-  try {
-    const { userId } = req.params;
+// const getPublicUserProfile = async (req, res, next) => {
+//   try {
+//     const { userId } = req.params;
 
-    const user = await prisma.user.findUnique({
-      where: { id: parseInt(userId) },
-      select: {
-        id: true,
-        firstname: true,
-        lastname: true,
-        username: true,
-        role: true,
-        profilePicture: true,
-        bio: true,
-        createdAt: true,
-        freelancerProfile: {
-          select: {
-            jobTitle: true,
-            overview: true,
-            skills: true,
-            rating: true,
-            totalEarnings: true,
-            availabilityStatus: true,
-          },
-        },
-      },
-    });
+//     const user = await prisma.user.findUnique({
+//       where: { id: parseInt(userId) },
+//       select: {
+//         id: true,
+//         firstname: true,
+//         lastname: true,
+//         username: true,
+//         role: true,
+//         profilePicture: true,
+//         bio: true,
+//         createdAt: true,
+//         freelancerProfile: {
+//           select: {
+//             jobTitle: true,
+//             overview: true,
+//             skills: true,
+//             rating: true,
+//             totalEarnings: true,
+//             availabilityStatus: true,
+//           },
+//         },
+//       },
+//     });
 
-    if (!user || !user.isActive) {
-      return next(new ApiError(404, "User not found or account is deactivated"));
-    }
+//     if (!user || !user.isActive) {
+//       return next(new ApiError(404, "User not found or account is deactivated"));
+//     }
 
-    return res.status(200).json(new ApiResponse(200, user, "Public user profile retrieved successfully"));
-  } catch (error) {
-    console.error("Error retrieving public user profile:", error);
-    return next(new ApiError(500, "Failed to retrieve public user profile", error.message));
-  }
-};
+//     return res.status(200).json(new ApiResponse(200, user, "Public user profile retrieved successfully"));
+//   } catch (error) {
+//     console.error("Error retrieving public user profile:", error);
+//     return next(new ApiError(500, "Failed to retrieve public user profile", error.message));
+//   }
+// };
 
-export { registerUser, loginUser, updateUser, getUserProfile, deleteUser, getPublicUserProfile };
+export { registerUser, loginUser, updateUser, getUserProfile, deleteUser };

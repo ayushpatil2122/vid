@@ -7,78 +7,71 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-// User model (Core user details)
+// User model (Enhanced)
 model User {
   id            Int       @id @default(autoincrement())
-  auth0Id       String?   @unique // Links to Auth0 user ID from OAuth
-  firstname     String    // Required: User's first name
-  lastname      String    // Required: User's last name
-  email         String    @unique // Required: User's email
-  password      String?   // Optional if using Auth0, required for manual registration
-  country       String    // Required: User's country
+  auth0Id       String?   @unique
+  firstname     String
+  lastname      String
+  email         String    @unique
+  password      String?
+  country       String
   username      String?   @unique
-  role          Role      @default(CLIENT) // Enum: freelancer, client, admin
-  profilePicture String?  // URL to profile image
-  bio           String?  // Short description
+  role          Role      @default(CLIENT)
+  profilePicture String?
+  bio           String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
   isActive      Boolean   @default(true)
 
   // Relationships
-  freelancerProfile FreelancerProfile? // One-to-one with FreelancerProfile
-  ordersAsClient    Order[]           @relation("ClientOrders") // Orders placed by this user
-  reviewsGiven      Review[]          @relation("ReviewsByClient") // Reviews given by this user
-  messagesSent      Message[]         @relation("Sender") // Messages sent by this user
-  messagesReceived  Message[]         @relation("Receiver") // Messages received by this user
-  transactions      Transaction[]     // Financial transactions
-  notifications     Notification[]    // Notifications for this user
-  disputesRaised    Dispute[]         @relation("RaisedBy") // Disputes raised by this user
-  jobs              Job[]             @relation("PostedBy") // Jobs posted by this user
-
+  freelancerProfile FreelancerProfile?
+  ordersAsClient    Order[]           @relation("ClientOrders")
+  reviewsGiven      Review[]          @relation("ReviewsByClient")
+  messagesSent      Message[]         @relation("Sender")
+  messagesReceived  Message[]         @relation("Receiver")
+  transactions      Transaction[]
+  notifications     Notification[]
+  disputesRaised    Dispute[]         @relation("RaisedBy")
+  jobs              Job[]             @relation("PostedBy")
   OrderStatusHistory OrderStatusHistory[]
-
-  Review Review[] @relation("ModeratedBy")
-
-  DisputeEvidence DisputeEvidence[]
-
-  DisputeComment DisputeComment[]
-
-  Dispute Dispute[] @relation("ResolvedBy")
-
-  referredReferrals   Referral[] @relation("Referrer") // Users referred by this user
-  receivedReferrals   Referral[] @relation("Referee") // Referrals received by this user
-
-
-  Promotion Promotion[]
+  Review            Review[]          @relation("ModeratedBy")
+  DisputeEvidence   DisputeEvidence[]
+  DisputeComment    DisputeComment[]
+  Dispute           Dispute[]         @relation("ResolvedBy")
+  referredReferrals Referral[]        @relation("Referrer")
+  receivedReferrals Referral[]        @relation("Referee")
+  Promotion         Promotion[]
 }
 
+// Role Enum
 enum Role {
   FREELANCER
   CLIENT
   ADMIN
 }
 
-// Job model (Unchanged from your previous version)
+// Job model (Unchanged)
 model Job {
   id                Int       @id @default(autoincrement())
   title             String
   description       String
-  category          String[]  // Array of categories (e.g., ["Wedding Videos", "Corporate Videos"])
+  category          String[]
   budgetMin         Float
   budgetMax         Float
   deadline          DateTime
   jobDifficulty     JobDifficulty
   projectLength     ProjectLength
-  keyResponsibilities String[] // Array of responsibilities
-  requiredSkills    String[]  // Array of skills
-  tools             String[]  // Array of tools
+  keyResponsibilities String[]
+  requiredSkills    String[]
+  tools             String[]
   scope             String
-  postedById        Int       @map("posted_by_id") // Foreign key to User
-  name              String    // Client's name
-  email             String    // Client's email
-  company           String?   // Optional company name
-  note              String?   // Optional additional note
-  videoFileUrl      String?   // URL to uploaded video file
+  postedById        Int       @map("posted_by_id")
+  name              String
+  email             String
+  company           String?
+  note              String?
+  videoFileUrl      String?
   postedTime        DateTime  @default(now())
   isVerified        Boolean   @default(true)
   location          String    @default("Remote")
@@ -87,7 +80,6 @@ model Job {
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now()) @updatedAt
 
-  // Relationships
   postedBy          User      @relation("PostedBy", fields: [postedById], references: [id], onDelete: Cascade)
 }
 
@@ -103,7 +95,7 @@ enum ProjectLength {
   LONG_TERM
 }
 
-// FreelancerProfile model (Enhanced with new fields)
+// FreelancerProfile model (Enhanced)
 model FreelancerProfile {
   id                Int       @id @default(autoincrement())
   userId            Int       @unique @map("user_id")
@@ -134,16 +126,7 @@ model FreelancerProfile {
   reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
   paymentSettings   PaymentSetting[]
   freelancerSkills  FreelancerSkill[]
-}
-
-model PortfolioVideo {
-  id           Int       @id @default(autoincrement())
-  freelancerId Int       @map("freelancer_id")
-  videoUrl     String
-  title        String?
-  description  String?
-  uploadedAt   DateTime  @default(now())
-  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+  software          FreelancerSoftware[] // New: Software proficiency
 }
 
 enum Availability {
@@ -158,31 +141,42 @@ enum ExperienceLevel {
   EXPERT
 }
 
+// PortfolioVideo model (Enhanced)
+model PortfolioVideo {
+  id           Int       @id @default(autoincrement())
+  freelancerId Int       @map("freelancer_id")
+  videoUrl     String
+  title        String?
+  description  String?
+  uploadedAt   DateTime  @default(now())
+  views        Int       @default(0) // New: Track views for portfolio stats
+  category     String?   // New: Category for portfolio stats
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+}
+
+// Gig model (Unchanged)
 model Gig {
   id            Int       @id @default(autoincrement())
   freelancerId  Int       @map("freelancer_id")
-  title         String    // Gig title (e.g., "Professional Video Editing")
-  description   String?   // Detailed description of the gig
-  category      String?   // Category (e.g., "Video Editing", "Animation")
-  pricing       Json      // Pricing tiers (e.g., {"basic": 50, "standard": 100, "premium": 200})
-  deliveryTime  Int?      // Delivery time in days (e.g., 3 days)
-  revisionCount Int?      // Number of revisions included (e.g., 2)
-  status        GigStatus @default(ACTIVE) // Status of the gig
-
-  // New fields for gig uploads
-  tags          String[]  // Tags for searchability (e.g., ["fast delivery", "4K"])
-  requirements  String?   // Client requirements/instructions (e.g., "Submit raw footage")
-  sampleMedia   GigSampleMedia[] // Relation to sample media (e.g., videos, images)
-  faqs          Json?     // FAQ as JSON (e.g., [{"question": "What formats?", "answer": "MP4, AVI"}])
-  packageDetails Json?    // Detailed package breakdown (e.g., {"basic": {"duration": "1 min"}})
-  isFeatured    Boolean   @default(false) // Whether the gig is featured/promoted
-  views         Int       @default(0)     // Number of views
+  title         String
+  description   String?
+  category      String?
+  pricing       Json
+  deliveryTime  Int?
+  revisionCount Int?
+  status        GigStatus @default(ACTIVE)
+  tags          String[]
+  requirements  String?
+  sampleMedia   GigSampleMedia[]
+  faqs          Json?
+  packageDetails Json?
+  isFeatured    Boolean   @default(false)
+  views         Int       @default(0)
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  // Relationships
   freelancer    FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
-  orders        Order[]           // Orders associated with this gig
+  orders        Order[]
 }
 
 enum GigStatus {
@@ -194,13 +188,12 @@ enum GigStatus {
 model GigSampleMedia {
   id          Int       @id @default(autoincrement())
   gigId       Int       @map("gig_id")
-  mediaUrl    String    // URL to the uploaded media (e.g., "https://example.com/sample.mp4")
-  mediaType   MediaType // Type of media (e.g., VIDEO, IMAGE)
-  title       String?   // Optional title (e.g., "Sample Wedding Edit")
-  description String?   // Optional description
+  mediaUrl    String
+  mediaType   MediaType
+  title       String?
+  description String?
   uploadedAt  DateTime  @default(now())
 
-  // Relationships
   gig         Gig       @relation(fields: [gigId], references: [id], onDelete: Cascade)
 }
 
@@ -211,66 +204,62 @@ enum MediaType {
   DOCUMENT
 }
 
-// Order model (Unchanged)
-// prisma/schema.prisma (relevant section)
+// Order model (Enhanced)
 model Order {
   id                Int           @id @default(autoincrement())
   gigId             Int           @map("gig_id")
   clientId          Int           @map("client_id")
   freelancerId      Int           @map("freelancer_id")
-  package           String        // Selected package (e.g., "basic", "standard", "premium")
-  totalPrice        Float         // Total price for the order
-  status            OrderStatus   @default(PENDING) // Current status
-  requirements      String?       // Client’s instructions or requirements
-  deliveryDeadline  DateTime?     // Expected delivery date
+  package           String
+  totalPrice        Float
+  status            OrderStatus   @default(PENDING)
+  requirements      String?
+  deliveryDeadline  DateTime?
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @default(now()) @updatedAt
-  completedAt       DateTime?     // Date of completion (if applicable)
-  
-  // New fields for large-scale support
-  orderNumber       String        @unique // Unique identifier (e.g., "ORD-12345")
-  revisionsRequested Int          @default(0) // Number of revisions requested
-  revisionsCompleted Int          @default(0) // Number of revisions completed
-  deliveryExtensions Int          @default(0) // Number of delivery extensions granted
-  extensionReason   String?       // Reason for delivery extension
-  cancellationReason String?      // Reason for cancellation (if canceled)
-  cancellationDate  DateTime?     // Date of cancellation (if applicable)
-  isUrgent          Boolean       @default(false) // Flag for urgent orders
-  priorityFee       Float?        // Additional fee for urgent/priority orders
-  customDetails     Json?         // Custom order details (e.g., {"resolution": "4K"})
-  statusHistory     OrderStatusHistory[] // Track status changes over time
+  completedAt       DateTime?
+  orderNumber       String        @unique
+  revisionsRequested Int          @default(0)
+  revisionsCompleted Int          @default(0)
+  deliveryExtensions Int          @default(0)
+  extensionReason   String?
+  cancellationReason String?
+  cancellationDate  DateTime?
+  isUrgent          Boolean       @default(false)
+  priorityFee       Float?
+  customDetails     Json?
+  statusHistory     OrderStatusHistory[]
+  progress          Int           @default(0) // New: Progress percentage (0-100)
+  daysLeft          Int?          // New: Days left until deadline (calculated or stored)
 
-  // Relationships
   gig               Gig           @relation(fields: [gigId], references: [id], onDelete: Cascade)
   client            User          @relation("ClientOrders", fields: [clientId], references: [id])
   freelancer        FreelancerProfile @relation("FreelancerOrders", fields: [freelancerId], references: [id], onDelete: Cascade)
-  transactions      Transaction[] // Financial transactions tied to this order
-  review            Review?       // Optional review after completion
-  messages          Message[]     // Messages related to this order
-  dispute           Dispute?      // Optional dispute tied to this order
+  transactions      Transaction[]
+  review            Review?
+  messages          Message[]
+  dispute           Dispute?
 }
 
-// History of status changes
 model OrderStatusHistory {
   id         Int           @id @default(autoincrement())
   orderId    Int           @map("order_id")
-  status     OrderStatus   // Status at this point in time
+  status     OrderStatus
   changedAt  DateTime      @default(now())
-  changedBy  Int?          @map("changed_by") // User who changed the status (optional)
-  
-  // Relationships
+  changedBy  Int?          @map("changed_by")
+
   order      Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
   user       User?         @relation(fields: [changedBy], references: [id])
 }
 
 enum OrderStatus {
-  PENDING         // Order created, awaiting freelancer acceptance
-  ACCEPTED        // Freelancer has accepted the order
-  IN_PROGRESS     // Work has started
-  DELIVERED       // Freelancer has submitted deliverables
-  COMPLETED       // Client has approved and order is finalized
-  CANCELLED       // Order was cancelled by client or freelancer
-  DISPUTED        // Order is under dispute
+  PENDING
+  ACCEPTED
+  IN_PROGRESS
+  DELIVERED
+  COMPLETED
+  CANCELLED
+  DISPUTED
 }
 
 // Transaction model (Unchanged)
@@ -302,29 +291,25 @@ enum TransactionStatus {
 }
 
 // Review model (Unchanged)
-// prisma/schema.prisma (relevant section)
 model Review {
   id            Int       @id @default(autoincrement())
-  orderId       Int       @unique @map("order_id") // One review per order
+  orderId       Int       @unique @map("order_id")
   clientId      Int       @map("client_id")
   freelancerId  Int       @map("freelancer_id")
-  rating        Int       // 1 to 5 stars
-  comment       String?   // Optional text feedback
-  
-  // New fields for large-scale support
-  title         String?   // Optional review title (e.g., "Great Work!")
-  isAnonymous   Boolean   @default(false) // Allow anonymous reviews
-  helpfulCount  Int       @default(0)     // Number of users marking review as helpful
-  response      String?   // Freelancer’s response to the review
-  respondedAt   DateTime? // Timestamp of freelancer response
-  isVerified    Boolean   @default(true) // Verified purchase (auto-set)
-  moderationStatus ModerationStatus @default(APPROVED) // Moderation state
-  moderatedAt   DateTime? // Timestamp of moderation
-  moderatedBy   Int?      @map("moderated_by") // Admin who moderated (optional)
+  rating        Int
+  comment       String?
+  title         String?
+  isAnonymous   Boolean   @default(false)
+  helpfulCount  Int       @default(0)
+  response      String?
+  respondedAt   DateTime?
+  isVerified    Boolean   @default(true)
+  moderationStatus ModerationStatus @default(APPROVED)
+  moderatedAt   DateTime?
+  moderatedBy   Int?      @map("moderated_by")
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  // Relationships
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   client        User      @relation("ReviewsByClient", fields: [clientId], references: [id])
   freelancer    FreelancerProfile @relation("ReviewsForFreelancer", fields: [freelancerId], references: [id], onDelete: Cascade)
@@ -332,32 +317,28 @@ model Review {
 }
 
 enum ModerationStatus {
-  PENDING    // Awaiting moderation
-  APPROVED   // Approved by admin
-  REJECTED   // Rejected (e.g., inappropriate content)
+  PENDING
+  APPROVED
+  REJECTED
 }
 
 // Message model (Unchanged)
-// prisma/schema.prisma (relevant section)
 model Message {
   id            Int       @id @default(autoincrement())
   senderId      Int       @map("sender_id")
   receiverId    Int       @map("receiver_id")
-  orderId       Int?      @map("order_id") // Optional: ties message to an order
-  content       String    // Message text
-  
-  // New fields for large-scale support
-  subject       String?   // Optional subject line (e.g., "Order #ORD-123 Update")
-  isRead        Boolean   @default(false) // Read status
-  isFlagged     Boolean   @default(false) // Flagged for moderation (e.g., spam)
-  flaggedReason String?   // Reason for flagging
-  parentId      Int?      @map("parent_id") // For threaded replies
-  attachments   MessageAttachment[] // File attachments (e.g., sample files)
+  orderId       Int?      @map("order_id")
+  content       String
+  subject       String?
+  isRead        Boolean   @default(false)
+  isFlagged     Boolean   @default(false)
+  flaggedReason String?
+  parentId      Int?      @map("parent_id")
+  attachments   MessageAttachment[]
   sentAt        DateTime  @default(now())
-  readAt        DateTime? // Timestamp when marked as read
-  deletedAt     DateTime? // Soft delete timestamp
+  readAt        DateTime?
+  deletedAt     DateTime?
 
-  // Relationships
   sender        User      @relation("Sender", fields: [senderId], references: [id])
   receiver      User      @relation("Receiver", fields: [receiverId], references: [id])
   order         Order?    @relation(fields: [orderId], references: [id], onDelete: Cascade)
@@ -365,16 +346,14 @@ model Message {
   replies       Message[] @relation("Replies")
 }
 
-// New model for message attachments
 model MessageAttachment {
   id          Int       @id @default(autoincrement())
   messageId   Int       @map("message_id")
-  fileUrl     String    // URL to the attachment (e.g., S3 link)
-  fileType    String    // MIME type (e.g., "image/png", "video/mp4")
-  fileName    String?   // Original file name
+  fileUrl     String
+  fileType    String
+  fileName    String?
   uploadedAt  DateTime  @default(now())
 
-  // Relationships
   message     Message   @relation(fields: [messageId], references: [id], onDelete: Cascade)
 }
 
@@ -408,36 +387,43 @@ model FreelancerSkill {
   @@id([freelancerId, skillId])
 }
 
+// New: FreelancerSoftware model
+model FreelancerSoftware {
+  id           Int       @id @default(autoincrement())
+  freelancerId Int       @map("freelancer_id")
+  name         String    // e.g., "Adobe Premiere Pro"
+  icon         String    // e.g., "Pr"
+  level        Int       // Proficiency level (0-100)
+
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id], onDelete: Cascade)
+}
+
 // Notification model (Unchanged)
-// prisma/schema.prisma (relevant section)
 model Notification {
   id            Int       @id @default(autoincrement())
   userId        Int       @map("user_id")
   type          NotificationType
-  content       String    // Notification message
-  
-  // New fields for large-scale support
-  entityType    String?   // Type of related entity (e.g., "ORDER", "MESSAGE", "REVIEW")
-  entityId      Int?      // ID of related entity
-  priority      Priority  @default(NORMAL) // Priority level (e.g., HIGH for urgent)
-  isRead        Boolean   @default(false) // Read status
-  readAt        DateTime? // Timestamp when marked as read
-  expiresAt     DateTime? // Optional expiration (e.g., for temporary alerts)
-  metadata      Json?     // Additional data (e.g., {"orderNumber": "ORD-123"})
+  content       String
+  entityType    String?
+  entityId      Int?
+  priority      Priority  @default(NORMAL)
+  isRead        Boolean   @default(false)
+  readAt        DateTime?
+  expiresAt     DateTime?
+  metadata      Json?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  // Relationships
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 
 enum NotificationType {
-  ORDER_UPDATE    // Order status changes
-  MESSAGE         // New message received
-  PAYMENT         // Payment-related events
-  REVIEW          // New review posted
-  DISPUTE         // Dispute-related events
-  SYSTEM          // General system alerts
+  ORDER_UPDATE
+  MESSAGE
+  PAYMENT
+  REVIEW
+  DISPUTE
+  SYSTEM
 }
 
 enum Priority {
@@ -447,63 +433,55 @@ enum Priority {
 }
 
 // Dispute model (Unchanged)
-// prisma/schema.prisma (relevant section)
 model Dispute {
   id            Int       @id @default(autoincrement())
-  orderId       Int       @unique @map("order_id") // One dispute per order
-  raisedById    Int       @map("raised_by_id") // User who raised the dispute
-  
-  // New fields for large-scale support
-  reason        String    // Reason for the dispute (e.g., "Late delivery")
-  description   String?   // Detailed explanation
-  status        DisputeStatus @default(OPEN) // Current status
-  resolution    String?   // Resolution details (e.g., "Refund issued")
-  resolvedAt    DateTime? // Timestamp of resolution
-  resolvedBy    Int?      @map("resolved_by") // Admin who resolved it
-  evidence      DisputeEvidence[] // Supporting evidence (e.g., files)
-  comments      DisputeComment[] // Comments from involved parties or admins
+  orderId       Int       @unique @map("order_id")
+  raisedById    Int       @map("raised_by_id")
+  reason        String
+  description   String?
+  status        DisputeStatus @default(OPEN)
+  resolution    String?
+  resolvedAt    DateTime?
+  resolvedBy    Int?      @map("resolved_by")
+  evidence      DisputeEvidence[]
+  comments      DisputeComment[]
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
 
-  // Relationships
   order         Order     @relation(fields: [orderId], references: [id], onDelete: Cascade)
   raisedBy      User      @relation("RaisedBy", fields: [raisedById], references: [id])
   resolver      User?     @relation("ResolvedBy", fields: [resolvedBy], references: [id])
 }
 
-// New model for dispute evidence
 model DisputeEvidence {
   id         Int       @id @default(autoincrement())
   disputeId  Int       @map("dispute_id")
-  fileUrl    String    // URL to evidence file (e.g., S3 link)
-  fileType   String    // MIME type (e.g., "image/png")
-  fileName   String?   // Original file name
-  uploadedBy Int       @map("uploaded_by") // User who uploaded
+  fileUrl    String
+  fileType   String
+  fileName   String?
+  uploadedBy Int       @map("uploaded_by")
   uploadedAt DateTime  @default(now())
 
-  // Relationships
   dispute    Dispute   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
   uploader   User      @relation(fields: [uploadedBy], references: [id])
 }
 
-// New model for dispute comments
 model DisputeComment {
   id         Int       @id @default(autoincrement())
   disputeId  Int       @map("dispute_id")
   userId     Int       @map("user_id")
-  content    String    // Comment text
+  content    String
   createdAt  DateTime  @default(now())
 
-  // Relationships
   dispute    Dispute   @relation(fields: [disputeId], references: [id], onDelete: Cascade)
   user       User      @relation(fields: [userId], references: [id])
 }
 
 enum DisputeStatus {
-  OPEN       // Dispute raised, awaiting review
-  IN_REVIEW  // Under admin review
-  RESOLVED   // Resolved by admin
-  CLOSED     // Closed (e.g., after resolution or dismissal)
+  OPEN
+  IN_REVIEW
+  RESOLVED
+  CLOSED
 }
 
 // PaymentSetting model (Unchanged)
@@ -528,45 +506,43 @@ model PlatformFee {
   transaction   Transaction @relation(fields: [transactionId], references: [id], onDelete: Cascade)
 }
 
-// prisma/schema.prisma (add this section)
+// Referral model (Unchanged)
 model Referral {
   id            Int       @id @default(autoincrement())
-  referrerId    Int       @map("referrer_id") // User who generated the referral
-  refereeId     Int?      @unique @map("referee_id") // User who used the referral (optional until redeemed)
-  referralCode  String    @unique // Unique code (e.g., "VID123")
-  status        ReferralStatus @default(PENDING) // Status of the referral
-  rewardAmount  Float?    // Reward amount (e.g., $10 credit)
+  referrerId    Int       @map("referrer_id")
+  refereeId     Int?      @unique @map("referee_id")
+  referralCode  String    @unique
+  status        ReferralStatus @default(PENDING)
+  rewardAmount  Float?
   createdAt     DateTime  @default(now())
-  redeemedAt    DateTime? // When the referral was redeemed
+  redeemedAt    DateTime?
 
-  // Relationships
   referrer      User      @relation("Referrer", fields: [referrerId], references: [id])
   referee       User?     @relation("Referee", fields: [refereeId], references: [id])
 }
 
 enum ReferralStatus {
-  PENDING    // Referral code created, not yet used
-  REDEEMED   // Referral code used by a new user
-  EXPIRED    // Referral code expired (if expiration is implemented)
+  PENDING
+  REDEEMED
+  EXPIRED
 }
 
-// prisma/schema.prisma (add this section)
+// Promotion model (Unchanged)
 model Promotion {
   id            Int       @id @default(autoincrement())
-  type          PromotionType // "PROMO_CODE" or "FEATURED_LISTING"
-  code          String?   @unique // Unique promo code (e.g., "SAVE10"), null for featured listings
-  entityType    String?   // "GIG" or "JOB" for featured listings, null for promo codes
-  entityId      Int?      // ID of the gig or job being featured
-  discountAmount Float?   // Discount amount (e.g., 10 for $10 off or 10% off)
-  discountType  DiscountType? // "PERCENTAGE" or "FIXED" for promo codes
-  userId        Int?      @map("user_id") // User who created/owns the promotion (optional for admin-created)
+  type          PromotionType
+  code          String?   @unique
+  entityType    String?
+  entityId      Int?
+  discountAmount Float?
+  discountType  DiscountType?
+  userId        Int?      @map("user_id")
   status        PromotionStatus @default(ACTIVE)
-  maxUses       Int?      // Maximum uses (null for unlimited)
-  uses          Int       @default(0) // Current number of uses
+  maxUses       Int?
+  uses          Int       @default(0)
   createdAt     DateTime  @default(now())
-  expiresAt     DateTime? // Expiration date (optional)
-  
-  // Relationships
+  expiresAt     DateTime?
+
   user          User?     @relation(fields: [userId], references: [id])
 }
 

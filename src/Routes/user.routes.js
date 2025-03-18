@@ -6,7 +6,6 @@ import {
   updateUser,
   getUserProfile,
   deleteUser,
-  getPublicUserProfile,
 } from "../Controllers/user.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody } from "../Middlewares/validate.middleware.js";
@@ -21,7 +20,9 @@ const registerUserSchema = Joi.object({
   email: Joi.string().email().required(),
   password: Joi.string().min(6).required(),
   country: Joi.string().required(),
+  role: Joi.string().valid('FREELANCER', 'CLIENT', 'ADMIN').required(), // Add role with valid enum values
 });
+
 
 const loginUserSchema = Joi.object({
   email: Joi.string().email().required(),
@@ -42,11 +43,12 @@ const updateUserSchema = Joi.object({
 // Public routes
 router.post("/register", validateBody(registerUserSchema), registerUser);
 router.post("/login", validateBody(loginUserSchema), loginUser);
-router.get("/:userId", getPublicUserProfile);
+//router.get("/:userId", getPublicUserProfile);
 
 // Protected routes
 router.use(authenticateToken);
 
+// Fetch current authenticated user's profile (used for state restoration after refresh)
 router.get("/me", getUserProfile);
 router.put("/update", uploadSingle("profilePicture"), validateBody(updateUserSchema), updateUser);
 router.delete("/delete", deleteUser);
