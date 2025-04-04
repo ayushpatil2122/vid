@@ -20,9 +20,12 @@ model User {
   role          Role      @default(CLIENT)
   profilePicture String?
   bio           String?
+  company       String?  // Added
+  companyEmail  String?  // Added
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
   isActive      Boolean   @default(true)
+  isProfileComplete Boolean @default(false) // Tracks completion for all roles
 
   // Relationships
   freelancerProfile FreelancerProfile?
@@ -105,13 +108,15 @@ model FreelancerProfile {
   jobTitle          String?
   overview          String?
   skills            String[]
+  languages         String[]  // Add if "language" is separate from skills
+  socialLinks       Json?             // Added
   portfolioVideos   PortfolioVideo[]
   tools             String[]
   equipmentCameras  String?
   equipmentLenses   String?
   equipmentLighting String?
   equipmentOther    String?
-  certifications    String?
+  certifications    String[]  @default([]) // Changed from String? to String[]
   minimumRate       Float?
   maximumRate       Float?
   availabilityStatus Availability @default(UNAVAILABLE)
@@ -126,7 +131,7 @@ model FreelancerProfile {
   reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
   paymentSettings   PaymentSetting[]
   freelancerSkills  FreelancerSkill[]
-  software          FreelancerSoftware[] // New: Software proficiency
+  software          FreelancerSoftware[]
 }
 
 enum Availability {

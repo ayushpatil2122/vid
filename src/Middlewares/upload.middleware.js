@@ -1,4 +1,3 @@
-// src/middlewares/upload.middleware.js
 import { ApiError } from "../Utils/ApiError.js";
 import multer from "multer";
 import { S3Client } from "@aws-sdk/client-s3";
@@ -49,7 +48,7 @@ const upload = multer({
 });
 
 /**
- * Middleware for uploading a single file
+ * Middleware for uploading a single file (optional)
  * @param {string} fieldName - Name of the file field in the request
  * @returns {Function} Middleware function
  */
@@ -61,17 +60,17 @@ const uploadSingle = (fieldName) => {
       } else if (err) {
         return next(err);
       }
-      if (!req.file) {
-        return next(new ApiError(400, "No file uploaded"));
+      // File is optional; set req.fileUrl only if a file was uploaded
+      if (req.file) {
+        req.fileUrl = req.file.location; // S3 URL stored here
       }
-      req.fileUrl = req.file.location; // S3 URL stored here
       next();
     });
   };
 };
 
 /**
- * Middleware for uploading multiple files
+ * Middleware for uploading multiple files (optional)
  * @param {string} fieldName - Name of the file field in the request
  * @param {number} maxCount - Maximum number of files allowed
  * @returns {Function} Middleware function
@@ -84,10 +83,10 @@ const uploadMultiple = (fieldName, maxCount) => {
       } else if (err) {
         return next(err);
       }
-      if (!req.files || req.files.length === 0) {
-        return next(new ApiError(400, "No files uploaded"));
+      // Files are optional; set req.fileUrls only if files were uploaded
+      if (req.files && req.files.length > 0) {
+        req.fileUrls = req.files.map(file => file.location); // Array of S3 URLs
       }
-      req.fileUrls = req.files.map(file => file.location); // Array of S3 URLs
       next();
     });
   };
