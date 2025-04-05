@@ -202,4 +202,57 @@ const getUserTransactions = async (req, res, next) => {
   }
 };
 
-export { createTransaction, processPayment, refundTransaction, getTransaction, getUserTransactions };
+// ... (keep existing imports and functions)
+
+const getEarnings = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    const userId = req.user.id;
+
+    const transactions = await prisma.transaction.findMany({
+      where: {
+        userId,
+        type: "PAYMENT",
+        status: "COMPLETED",
+      },
+      select: {
+        amount: true,
+        createdAt: true,
+      },
+    });
+
+    if (!transactions.length) {
+      return res.status(200).json(new ApiResponse(200, [], "No earnings found"));
+    }
+
+    const earningsByMonth = transactions.reduce((acc, tx) => {
+      const createdAt = tx.createdAt ? new Date(tx.createdAt) : new Date(); // Fallback to now if null
+      const month = createdAt.toLocaleString("default", { month: "long", year: "numeric" });
+      acc[month] = (acc[month] || 0) + (tx.amount || 0); // Fallback to 0 if amount is null
+      return acc;
+    }, {});
+
+    const earningsData = Object.entries(earningsByMonth).map(([month, amount], index) => ({
+      id: index + 1,
+      month,
+      amount,
+    }));
+
+    return res.status(200).json(new ApiResponse(200, earningsData, "Earnings retrieved successfully"));
+  } catch (error) {
+    console.error(`Error in getEarnings for user ${req.user?.id}:`, error);
+    return next(new ApiError(500, "Failed to retrieve earnings", error.stack || error.message));
+  }
+};
+
+// Update export
+export {
+  createTransaction,
+  processPayment,
+  refundTransaction,
+  getTransaction,
+  getUserTransactions,
+  getEarnings,
+};

@@ -18,6 +18,8 @@ import referralRouter from "./Routes/referral.routes.js"; // Import user routes
 import promotionRouter from "./Routes/promotion.routes.js"; // Import user routes
 import { rateLimiter } from "./Middlewares/ratelimit.middleware.js";
 import { errorHandler } from "./Middlewares/error.middleware.js";
+import freelancerRoutes from "./Routes/freelancer.routes.js";
+import portfolioRoutes from "./Routes/portfolio.routes.js";
 
 const app = express();
 
@@ -60,6 +62,8 @@ app.use("/api/v1/admin", adminRouter);
 app.use("/api/v1/analytics", analyticsRouter);
 app.use("/api/v1/referrals", referralRouter);
 app.use("/api/v1/promotions", promotionRouter);
+app.use("/api/v1/freelancer", freelancerRoutes);
+app.use("/api/v1/portfolio", portfolioRoutes);
 
 
 

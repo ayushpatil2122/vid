@@ -133,7 +133,7 @@ const getOrder = async (req, res, next) => {
       where: { id: parseInt(orderId) },
       include: {
         gig: true,
-        client: { select: { firstname, lastname, email } },
+        client: { select: { firstname: true, lastname: true, email: true } },
         freelancer: { include: { user: { select: { firstname, lastname, email } } } },
         transactions: true,
         review: true,
@@ -278,4 +278,143 @@ const cancelOrder = async (req, res, next) => {
   }
 };
 
-export { createOrder, updateOrderStatus, getOrder, getClientOrders, getFreelancerOrders, cancelOrder };
+// ... (keep existing imports and functions)
+
+// Add these new functions after existing ones
+const getCurrentOrders = async (req, res, next) => {
+  try {
+    console.log(`Fetching current orders for user: ${req.user?.id}`);
+    if (!req.user || !req.user.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    const userId = req.user.id;
+
+    const freelancer = await prisma.freelancerProfile.findUnique({ where: { userId } });
+    console.log(`FreelancerProfile for user ${userId}:`, freelancer);
+    if (!freelancer) {
+      throw new ApiError(404, "Freelancer profile not found for this user");
+    }
+
+    const orders = await prisma.order.findMany({
+      where: {
+        freelancerId: freelancer.id,
+        status: { in: ["ACCEPTED", "IN_PROGRESS"] },
+      },
+      include: {
+        gig: true,
+        client: { select: { firstname: true, lastname: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    console.log(`Current orders found for freelancer ${freelancer.id}:`, orders.length);
+
+    const ordersWithDaysLeft = orders.map(order => ({
+      ...order,
+      daysLeft: order.deliveryDeadline
+        ? Math.max(0, Math.ceil((new Date(order.deliveryDeadline) - new Date()) / (1000 * 60 * 60 * 24)))
+        : null,
+    }));
+
+    return res.status(200).json(new ApiResponse(200, ordersWithDaysLeft, "Current orders retrieved successfully"));
+  } catch (error) {
+    console.error(`Error in getCurrentOrders for user ${req.user?.id}:`, error);
+    return next(new ApiError(500, "Failed to retrieve current orders", error.message));
+  }
+};
+
+const getPendingOrders = async (req, res, next) => {
+  try {
+    console.log(`Fetching pending orders for user: ${req.user?.id}`);
+    if (!req.user || !req.user.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    const userId = req.user.id;
+
+    const freelancer = await prisma.freelancerProfile.findUnique({ where: { userId } });
+    console.log(`FreelancerProfile for user ${userId}:`, freelancer);
+    if (!freelancer) {
+      return res.status(200).json(new ApiResponse(200, [], "No freelancer profile found, no pending orders"));
+    }
+
+    const orders = await prisma.order.findMany({
+      where: {
+        freelancerId: freelancer.id,
+        status: "PENDING",
+      },
+      include: {
+        gig: true,
+        client: {
+          select: { firstname: true, lastname: true },
+        },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    console.log(`Pending orders found for freelancer ${freelancer.id}:`, orders.length);
+
+    const ordersWithDaysLeft = orders.map(order => ({
+      ...order,
+      daysLeft: order.deliveryDeadline
+        ? Math.max(0, Math.ceil((new Date(order.deliveryDeadline) - new Date()) / (1000 * 60 * 60 * 24)))
+        : 0,
+    }));
+
+    return res.status(200).json(new ApiResponse(200, ordersWithDaysLeft, "Pending orders retrieved successfully"));
+  } catch (error) {
+    console.error(`Error in getPendingOrders for user ${req.user?.id}:`, error.stack);
+    return next(new ApiError(500, "Failed to retrieve pending orders", error.message));
+  }
+};
+
+const getCompletedOrders = async (req, res, next) => {
+  try {
+    console.log(`Fetching completed orders for user: ${req.user?.id}`);
+    if (!req.user || !req.user.id) {
+      throw new ApiError(401, "Unauthorized: User not authenticated");
+    }
+    const userId = req.user.id;
+
+    const freelancer = await prisma.freelancerProfile.findUnique({ where: { userId } });
+    console.log(`FreelancerProfile for user ${userId}:`, freelancer);
+    if (!freelancer) {
+      throw new ApiError(404, "Freelancer profile not found for this user");
+    }
+
+    const orders = await prisma.order.findMany({
+      where: {
+        freelancerId: freelancer.id,
+        status: "COMPLETED",
+      },
+      include: {
+        gig: true,
+        client: { select: { firstname: true, lastname: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    });
+    console.log(`Completed orders found for freelancer ${freelancer.id}:`, orders.length);
+
+    const ordersWithDaysLeft = orders.map(order => ({
+      ...order,
+      daysLeft: order.deliveryDeadline
+        ? Math.max(0, Math.ceil((new Date(order.deliveryDeadline) - new Date()) / (1000 * 60 * 60 * 24)))
+        : null,
+    }));
+
+    return res.status(200).json(new ApiResponse(200, ordersWithDaysLeft, "Completed orders retrieved successfully"));
+  } catch (error) {
+    console.error(`Error in getCompletedOrders for user ${req.user?.id}:`, error);
+    return next(new ApiError(500, "Failed to retrieve completed orders", error.message));
+  }
+};
+
+// Update export
+export {
+  createOrder,
+  updateOrderStatus,
+  getOrder,
+  getClientOrders,
+  getFreelancerOrders,
+  cancelOrder,
+  getCurrentOrders,
+  getPendingOrders,
+  getCompletedOrders,
+};

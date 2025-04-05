@@ -6,6 +6,7 @@ import {
   refundTransaction,
   getTransaction,
   getUserTransactions,
+  getEarnings,
 } from "../Controllers/transaction.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
@@ -29,6 +30,11 @@ const getTransactionsSchema = Joi.object({
   type: Joi.string().valid("PAYMENT", "REFUND", "PAYOUT").optional(),
 });
 
+const getEarningsSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+});
+
 router.use(authenticateToken);
 
 router.post("/", validateBody(createTransactionSchema), createTransaction);
@@ -36,5 +42,6 @@ router.post("/:transactionId/process", processPayment);
 router.post("/:transactionId/refund", validateBody(refundTransactionSchema), refundTransaction);
 router.get("/:transactionId", getTransaction);
 router.get("/", validateQuery(getTransactionsSchema), getUserTransactions);
+router.get("/earnings", validateQuery(getEarningsSchema), getEarnings); // Ensure this line exists
 
 export default router;

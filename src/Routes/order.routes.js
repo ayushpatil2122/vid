@@ -1,4 +1,3 @@
-// src/routes/orderRoutes.js
 import express from "express";
 import {
   createOrder,
@@ -7,22 +6,53 @@ import {
   getClientOrders,
   getFreelancerOrders,
   cancelOrder,
-} from "../Controllers/order.controller.js";
+  getCurrentOrders,
+  getPendingOrders,
+  getCompletedOrders,
+} from "../Controllers/order.controller.js"; // Adjust path case if needed
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
-import { restrictTo } from "../Middlewares/restrict.middleware.js";
-import { checkOwnership } from "../Middlewares/ownership.middlware.js";
-import { rateLimiterByUser } from "../Middlewares/ratelimit.middleware.js";
+import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
+import Joi from "joi";
 
 const router = express.Router();
 
-// All routes require authentication
+// Validation schemas
+const createOrderSchema = Joi.object({
+  gigId: Joi.number().integer().required(),
+  selectedPackage: Joi.string().required(),
+  requirements: Joi.string().optional(),
+  isUrgent: Joi.boolean().optional(),
+  customDetails: Joi.object().optional(),
+});
+
+const updateStatusSchema = Joi.object({
+  status: Joi.string().valid("PENDING", "ACCEPTED", "IN_PROGRESS", "DELIVERED", "COMPLETED", "CANCELLED", "DISPUTED").required(),
+  extensionReason: Joi.string().optional(),
+  cancellationReason: Joi.string().optional(),
+});
+
+const cancelOrderSchema = Joi.object({
+  cancellationReason: Joi.string().optional(),
+});
+
+const getOrdersSchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  status: Joi.string().valid("PENDING", "ACCEPTED", "IN_PROGRESS", "DELIVERED", "COMPLETED", "CANCELLED", "DISPUTED").optional(),
+});
+
+// Apply authentication middleware to all routes
 router.use(authenticateToken);
 
-router.post("/", authenticateToken, rateLimiterByUser({ max: 10 }), createOrder); // User-specific rate limit  // Create a new order
-router.put("/orders/:orderId/status", authenticateToken, checkOwnership("Order", "orderId", "clientId"), updateOrderStatus); // Update order status
-router.get("/:orderId", getOrder);                // Get a single order
-router.get("/client", getClientOrders);           // Get all orders for the client
-router.get("/freelancer", restrictTo("FREELANCER"), getFreelancerOrders); // Get all orders for the freelancer
-router.post("/:orderId/cancel", cancelOrder);     // Cancel an order
+// Routes
+router.post("/", validateBody(createOrderSchema), createOrder);
+router.patch("/:orderId/status", validateBody(updateStatusSchema), updateOrderStatus);
+router.get("/:orderId", getOrder);
+router.get("/client", validateQuery(getOrdersSchema), getClientOrders);
+router.get("/freelancer", validateQuery(getOrdersSchema), getFreelancerOrders);
+router.patch("/:orderId/cancel", validateBody(cancelOrderSchema), cancelOrder);
+router.get("/current", getCurrentOrders);
+router.get("/pending", getPendingOrders);
+router.get("/completed", getCompletedOrders);
 
 export default router;

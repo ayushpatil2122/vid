@@ -226,11 +226,39 @@ const getFreelancerGigs = async (req, res, next) => {
 
     const gigs = await prisma.gig.findMany({
       where: { freelancerId: freelancerProfile.id },
-      include: { sampleMedia: true },
+      include: {
+        sampleMedia: true,
+        orders: {
+          include: {
+            transactions: {
+              where: { type: "PAYMENT", status: "COMPLETED" },
+              select: { amount: true },
+            },
+            review: {
+              select: { rating: true },
+            },
+          },
+        },
+      },
+    });
+
+    const enrichedGigs = gigs.map(gig => {
+      const earnings = gig.orders.reduce((sum, order) => {
+        return sum + (order.transactions.reduce((tSum, t) => tSum + t.amount, 0));
+      }, 0);
+      const ratings = gig.orders.map(order => order.review?.rating || 0).filter(r => r > 0);
+      const averageRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1) : "N/A";
+
+      return {
+        ...gig,
+        earnings,
+        orderCount: gig.orders.length,
+        averageRating,
+      };
     });
 
     return res.status(200).json(
-      new ApiResponse(200, gigs, "Freelancer gigs retrieved successfully")
+      new ApiResponse(200, enrichedGigs, "Freelancer gigs retrieved successfully")
     );
   } catch (error) {
     console.error("Error retrieving freelancer gigs:", error);
