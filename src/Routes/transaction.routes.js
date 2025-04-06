@@ -1,4 +1,3 @@
-// src/routes/transactionRoutes.js
 import express from "express";
 import {
   createTransaction,
@@ -37,11 +36,14 @@ const getEarningsSchema = Joi.object({
 
 router.use(authenticateToken);
 
+// Static routes first
 router.post("/", validateBody(createTransactionSchema), createTransaction);
+router.get("/", validateQuery(getTransactionsSchema), getUserTransactions);
+router.get("/earnings", validateQuery(getEarningsSchema), getEarnings); // Moved up
+
+// Dynamic routes last
 router.post("/:transactionId/process", processPayment);
 router.post("/:transactionId/refund", validateBody(refundTransactionSchema), refundTransaction);
-router.get("/:transactionId", getTransaction);
-router.get("/", validateQuery(getTransactionsSchema), getUserTransactions);
-router.get("/earnings", validateQuery(getEarningsSchema), getEarnings); // Ensure this line exists
+router.get("/:transactionId", getTransaction); // Moved down
 
 export default router;

@@ -2,79 +2,128 @@
 import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import prisma from "../prismaClient.js";
+import multer from "multer";
+import path from "path";
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, "uploads/"); // Ensure this folder exists
+  },
+  filename: (req, file, cb) => {
+    cb(null, Date.now() + path.extname(file.originalname));
+  },
+});
+const upload = multer({
+  storage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // 10MB limit
+  fileFilter: (req, file, cb) => {
+    const filetypes = /jpeg|jpg|png|mp4/;
+    const mimetype = filetypes.test(file.mimetype);
+    const extname = filetypes.test(path.extname(file.originalname).toLowerCase());
+    if (mimetype && extname) {
+      return cb(null, true);
+    }
+    cb(new ApiError(400, "File must be JPEG, PNG, or MP4"));
+  },
+}).fields([
+  { name: "thumbnail", maxCount: 1 },
+  { name: "sampleMedia", maxCount: 3 }, // Adjust maxCount as needed
+]);
 
 const createGig = async (req, res, next) => {
-  try {
-    if (!req.user || !req.user.id) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated"));
-    }
-    const freelancerId = req.user.id;
-
-    const {
-      title, description, category, pricing, deliveryTime, revisionCount,
-      tags, requirements, faqs, packageDetails, sampleMedia,
-    } = req.body;
-
-    // Validate required fields
-    if (!title || !pricing || !deliveryTime) {
-      return next(new ApiError(400, "Missing required fields: title, pricing, and deliveryTime are mandatory."));
+  upload(req, res, async (err) => {
+    if (err) {
+      return next(new ApiError(400, err.message));
     }
 
-    // Validate pricing (must be a valid JSON object)
-    if (typeof pricing !== "object" || Object.keys(pricing).length === 0) {
-      return next(new ApiError(400, "Pricing must be a non-empty JSON object (e.g., {'basic': 50})."));
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const freelancerId = req.user.id;
+
+      const {
+        title, description, category, pricing, deliveryTime, revisionCount,
+        tags, requirements, faqs, packageDetails,
+      } = req.body;
+
+      // Validate required fields
+      if (!title || !pricing || !deliveryTime) {
+        return next(new ApiError(400, "Missing required fields: title, pricing, and deliveryTime are mandatory."));
+      }
+
+      // Parse JSON fields
+      const parsedPricing = JSON.parse(pricing);
+      const parsedTags = tags ? JSON.parse(tags) : [];
+      const parsedFaqs = faqs ? JSON.parse(faqs) : [];
+      const parsedPackageDetails = packageDetails ? JSON.parse(packageDetails) : [];
+
+      // Validate pricing
+      if (!Array.isArray(parsedPricing) || parsedPricing.length === 0) {
+        return next(new ApiError(400, "Pricing must be a non-empty array of objects."));
+      }
+
+      // Validate deliveryTime
+      const parsedDeliveryTime = parseInt(deliveryTime);
+      if (isNaN(parsedDeliveryTime) || parsedDeliveryTime <= 0) {
+        return next(new ApiError(400, "Delivery time must be a positive integer."));
+      }
+
+      const freelancerProfile = await prisma.freelancerProfile.findUnique({
+        where: { userId: freelancerId },
+      });
+      if (!freelancerProfile) {
+        return next(new ApiError(404, "Freelancer profile not found. Create a profile first."));
+      }
+
+      // Handle thumbnail and sample media
+      const sampleMediaData = [];
+      
+      // Add thumbnail as a special sample media entry
+      if (req.files?.thumbnail?.[0]) {
+        sampleMediaData.push({
+          mediaUrl: `/uploads/${req.files.thumbnail[0].filename}`,
+          mediaType: req.files.thumbnail[0].mimetype.split("/")[1] === "mp4" ? "video" : "thumbnail", // Distinguish thumbnail
+        });
+      }
+
+      // Add other sample media
+      if (req.files?.sampleMedia) {
+        req.files.sampleMedia.forEach(file => {
+          sampleMediaData.push({
+            mediaUrl: `/uploads/${file.filename}`,
+            mediaType: file.mimetype.split("/")[1] === "mp4" ? "video" : "image",
+          });
+        });
+      }
+
+      const gig = await prisma.gig.create({
+        data: {
+          freelancerId: freelancerProfile.id,
+          title,
+          description,
+          category,
+          pricing: parsedPricing,
+          deliveryTime: parsedDeliveryTime,
+          revisionCount: revisionCount ? parseInt(revisionCount) : null,
+          tags: parsedTags,
+          requirements,
+          faqs: parsedFaqs,
+          packageDetails: parsedPackageDetails,
+          sampleMedia: { create: sampleMediaData }, // Create related sample media
+        },
+        include: { sampleMedia: true },
+      });
+
+      return res.status(201).json(
+        new ApiResponse(201, gig, "Gig created successfully")
+      );
+    } catch (error) {
+      console.error("Error creating gig:", error);
+      return next(new ApiError(500, "Failed to create gig", error.message));
     }
-
-    // Validate deliveryTime
-    const parsedDeliveryTime = parseInt(deliveryTime);
-    if (isNaN(parsedDeliveryTime) || parsedDeliveryTime <= 0) {
-      return next(new ApiError(400, "Delivery time must be a positive integer."));
-    }
-
-    // Validate sampleMedia if provided
-    if (sampleMedia && (!Array.isArray(sampleMedia) || sampleMedia.some(m => !m.mediaUrl || !m.mediaType))) {
-      return next(new ApiError(400, "Sample media must be an array with mediaUrl and mediaType for each entry."));
-    }
-
-    const freelancerProfile = await prisma.freelancerProfile.findUnique({
-      where: { userId: freelancerId },
-    });
-    if (!freelancerProfile) {
-      return next(new ApiError(404, "Freelancer profile not found. Create a profile first."));
-    }
-
-    const gig = await prisma.gig.create({
-      data: {
-        freelancerId: freelancerProfile.id,
-        title,
-        description,
-        category,
-        pricing,
-        deliveryTime: parsedDeliveryTime,
-        revisionCount: revisionCount ? parseInt(revisionCount) : null,
-        tags: Array.isArray(tags) ? tags : tags ? [tags] : [],
-        requirements,
-        faqs,
-        packageDetails,
-        sampleMedia: sampleMedia ? {
-          create: sampleMedia.map(media => ({
-            mediaUrl: media.mediaUrl,
-            mediaType: media.mediaType,
-            title: media.title,
-            description: media.description,
-          })),
-        } : undefined,
-      },
-      include: { sampleMedia: true },
-    });
-
-    return res.status(201).json(
-      new ApiResponse(201, gig, "Gig created successfully")
-    );
-  } catch (error) {
-    console.error("Error creating gig:", error);
-    return next(new ApiError(500, "Failed to create gig", error.message));
-  }
+  });
 };
 
 const updateGig = async (req, res, next) => {
@@ -180,13 +229,17 @@ const getGig = async (req, res, next) => {
   try {
     const { gigId } = req.params;
 
+    if (!gigId || isNaN(parseInt(gigId))) {
+      return next(new ApiError(400, "Valid gigId is required"));
+    }
+
     const gig = await prisma.gig.findUnique({
       where: { id: parseInt(gigId) },
       include: {
         sampleMedia: true,
         freelancer: {
           include: {
-            user: { select: { firstname, lastname, email } },
+            user: { select: { firstname: true, lastname: true, email: true } },
           },
         },
       },
@@ -195,7 +248,6 @@ const getGig = async (req, res, next) => {
       return next(new ApiError(404, "Gig not found."));
     }
 
-    // Increment views
     await prisma.gig.update({
       where: { id: parseInt(gigId) },
       data: { views: gig.views + 1 },
@@ -212,6 +264,7 @@ const getGig = async (req, res, next) => {
 
 const getFreelancerGigs = async (req, res, next) => {
   try {
+    console.log("Request user:", req.user); // Debug
     if (!req.user || !req.user.id) {
       return next(new ApiError(401, "Unauthorized: User not authenticated"));
     }
@@ -220,49 +273,23 @@ const getFreelancerGigs = async (req, res, next) => {
     const freelancerProfile = await prisma.freelancerProfile.findUnique({
       where: { userId: freelancerId },
     });
+    console.log("Freelancer profile:", freelancerProfile); // Debug
     if (!freelancerProfile) {
-      return next(new ApiError(404, "Freelancer profile not found."));
+      return next(new ApiError(404, "Freelancer profile not found"));
     }
 
     const gigs = await prisma.gig.findMany({
       where: { freelancerId: freelancerProfile.id },
-      include: {
-        sampleMedia: true,
-        orders: {
-          include: {
-            transactions: {
-              where: { type: "PAYMENT", status: "COMPLETED" },
-              select: { amount: true },
-            },
-            review: {
-              select: { rating: true },
-            },
-          },
-        },
-      },
+      include: { sampleMedia: true },
     });
-
-    const enrichedGigs = gigs.map(gig => {
-      const earnings = gig.orders.reduce((sum, order) => {
-        return sum + (order.transactions.reduce((tSum, t) => tSum + t.amount, 0));
-      }, 0);
-      const ratings = gig.orders.map(order => order.review?.rating || 0).filter(r => r > 0);
-      const averageRating = ratings.length > 0 ? (ratings.reduce((sum, r) => sum + r, 0) / ratings.length).toFixed(1) : "N/A";
-
-      return {
-        ...gig,
-        earnings,
-        orderCount: gig.orders.length,
-        averageRating,
-      };
-    });
+    console.log("Fetched gigs:", gigs); // Debug
 
     return res.status(200).json(
-      new ApiResponse(200, enrichedGigs, "Freelancer gigs retrieved successfully")
+      new ApiResponse(200, gigs, "Freelancer gigs retrieved successfully")
     );
   } catch (error) {
-    console.error("Error retrieving freelancer gigs:", error);
-    return next(new ApiError(500, "Failed to retrieve freelancer gigs", error.message));
+    console.error("Error fetching freelancer gigs:", error);
+    return next(new ApiError(500, "Failed to fetch freelancer gigs", error.message));
   }
 };
 

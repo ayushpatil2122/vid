@@ -121,121 +121,131 @@ const createOrder = async (req, res, next) => {
       return next(new ApiError(500, "Failed to update order status", error.message));
     }
   };
-const getOrder = async (req, res, next) => {
-  try {
-    if (!req.user || !req.user.id) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+  const getOrder = async (req, res, next) => {
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const userId = req.user.id;
+      const { orderId } = req.params;
+  
+      if (!orderId || isNaN(parseInt(orderId))) {
+        return next(new ApiError(400, "Valid orderId is required"));
+      }
+  
+      const order = await prisma.order.findUnique({
+        where: { id: parseInt(orderId) },
+        include: {
+          gig: true,
+          client: { select: { firstname: true, lastname: true, email: true } },
+          freelancer: { include: { user: { select: { firstname: true, lastname: true, email: true } } } },
+          transactions: true,
+          review: true,
+          messages: true,
+          dispute: true,
+          statusHistory: true,
+        },
+      });
+      if (!order) {
+        return next(new ApiError(404, "Order not found"));
+      }
+      if (order.clientId !== userId && order.freelancer.userId !== userId) {
+        return next(new ApiError(403, "Forbidden: You can only view your own orders"));
+      }
+  
+      return res.status(200).json(new ApiResponse(200, order, "Order retrieved successfully"));
+    } catch (error) {
+      console.error("Error retrieving order:", error);
+      return next(new ApiError(500, "Failed to retrieve order", error.message));
     }
-    const userId = req.user.id;
-    const { orderId } = req.params;
+  };
 
-    const order = await prisma.order.findUnique({
-      where: { id: parseInt(orderId) },
-      include: {
-        gig: true,
-        client: { select: { firstname: true, lastname: true, email: true } },
-        freelancer: { include: { user: { select: { firstname, lastname, email } } } },
-        transactions: true,
-        review: true,
-        messages: true,
-        dispute: true,
-        statusHistory: true,
-      },
-    });
-    if (!order) {
-      return next(new ApiError(404, "Order not found"));
+  const getClientOrders = async (req, res, next) => {
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const clientId = req.user.id;
+      const { page = 1, limit = 10, status } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+  
+      const where = { clientId };
+      if (status) where.status = status;
+  
+      const [orders, total] = await Promise.all([
+        prisma.order.findMany({
+          where,
+          include: {
+            gig: true,
+            freelancer: { include: { user: { select: { firstname: true, lastname: true } } } }, // Fixed
+          },
+          skip,
+          take: parseInt(limit),
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.order.count({ where }),
+      ]);
+  
+      return res.status(200).json(
+        new ApiResponse(200, {
+          orders,
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / limit),
+        }, "Client orders retrieved successfully")
+      );
+    } catch (error) {
+      console.error("Error retrieving client orders:", error);
+      return next(new ApiError(500, "Failed to retrieve client orders", error.message));
     }
-    if (order.clientId !== userId && order.freelancer.userId !== userId) {
-      return next(new ApiError(403, "Forbidden: You can only view your own orders"));
+  };
+
+  const getFreelancerOrders = async (req, res, next) => {
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const userId = req.user.id;
+      const { page = 1, limit = 10, status } = req.query;
+      const skip = (parseInt(page) - 1) * parseInt(limit);
+  
+      const freelancer = await prisma.freelancerProfile.findUnique({ where: { userId } });
+      if (!freelancer) {
+        return next(new ApiError(404, "Freelancer profile not found"));
+      }
+  
+      const where = { freelancerId: freelancer.id };
+      if (status) where.status = status;
+  
+      const [orders, total] = await Promise.all([
+        prisma.order.findMany({
+          where,
+          include: {
+            gig: true,
+            client: { select: { firstname: true, lastname: true } }, // Fixed
+          },
+          skip,
+          take: parseInt(limit),
+          orderBy: { createdAt: "desc" },
+        }),
+        prisma.order.count({ where }),
+      ]);
+  
+      return res.status(200).json(
+        new ApiResponse(200, {
+          orders,
+          total,
+          page: parseInt(page),
+          limit: parseInt(limit),
+          totalPages: Math.ceil(total / limit),
+        }, "Freelancer orders retrieved successfully")
+      );
+    } catch (error) {
+      console.error("Error retrieving freelancer orders:", error);
+      return next(new ApiError(500, "Failed to retrieve freelancer orders", error.message));
     }
-
-    return res.status(200).json(new ApiResponse(200, order, "Order retrieved successfully"));
-  } catch (error) {
-    console.error("Error retrieving order:", error);
-    return next(new ApiError(500, "Failed to retrieve order", error.message));
-  }
-};
-
-const getClientOrders = async (req, res, next) => {
-  try {
-    if (!req.user || !req.user.id) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated"));
-    }
-    const clientId = req.user.id;
-    const { page = 1, limit = 10, status } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const where = { clientId };
-    if (status) where.status = status;
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: { gig: true, freelancer: { select: { user: { select: { firstname, lastname } } } } },
-        skip,
-        take: parseInt(limit),
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.order.count({ where }),
-    ]);
-
-    return res.status(200).json(
-      new ApiResponse(200, {
-        orders,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit),
-      }, "Client orders retrieved successfully")
-    );
-  } catch (error) {
-    console.error("Error retrieving client orders:", error);
-    return next(new ApiError(500, "Failed to retrieve client orders", error.message));
-  }
-};
-
-const getFreelancerOrders = async (req, res, next) => {
-  try {
-    if (!req.user || !req.user.id) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated"));
-    }
-    const userId = req.user.id;
-    const { page = 1, limit = 10, status } = req.query;
-    const skip = (parseInt(page) - 1) * parseInt(limit);
-
-    const freelancer = await prisma.freelancerProfile.findUnique({ where: { userId } });
-    if (!freelancer) {
-      return next(new ApiError(404, "Freelancer profile not found"));
-    }
-
-    const where = { freelancerId: freelancer.id };
-    if (status) where.status = status;
-
-    const [orders, total] = await Promise.all([
-      prisma.order.findMany({
-        where,
-        include: { gig: true, client: { select: { firstname, lastname } } },
-        skip,
-        take: parseInt(limit),
-        orderBy: { createdAt: "desc" },
-      }),
-      prisma.order.count({ where }),
-    ]);
-
-    return res.status(200).json(
-      new ApiResponse(200, {
-        orders,
-        total,
-        page: parseInt(page),
-        limit: parseInt(limit),
-        totalPages: Math.ceil(total / limit),
-      }, "Freelancer orders retrieved successfully")
-    );
-  } catch (error) {
-    console.error("Error retrieving freelancer orders:", error);
-    return next(new ApiError(500, "Failed to retrieve freelancer orders", error.message));
-  }
-};
+  };
 
 const cancelOrder = async (req, res, next) => {
   try {
@@ -323,6 +333,7 @@ const getCurrentOrders = async (req, res, next) => {
 };
 
 const getPendingOrders = async (req, res, next) => {
+  console.log("Entering getPendingOrders for user:", req.user?.id); // Debug log
   try {
     console.log(`Fetching pending orders for user: ${req.user?.id}`);
     if (!req.user || !req.user.id) {
@@ -343,9 +354,7 @@ const getPendingOrders = async (req, res, next) => {
       },
       include: {
         gig: true,
-        client: {
-          select: { firstname: true, lastname: true },
-        },
+        client: { select: { firstname: true, lastname: true } },
       },
       orderBy: { createdAt: "desc" },
     });

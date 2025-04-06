@@ -187,6 +187,7 @@ model Gig {
 enum GigStatus {
   ACTIVE
   PAUSED
+  DRAFT
   DELETED
 }
 

@@ -9,7 +9,7 @@ import {
   getCurrentOrders,
   getPendingOrders,
   getCompletedOrders,
-} from "../Controllers/order.controller.js"; // Adjust path case if needed
+} from "../Controllers/order.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
 import Joi from "joi";
@@ -41,18 +41,19 @@ const getOrdersSchema = Joi.object({
   status: Joi.string().valid("PENDING", "ACCEPTED", "IN_PROGRESS", "DELIVERED", "COMPLETED", "CANCELLED", "DISPUTED").optional(),
 });
 
-// Apply authentication middleware to all routes
 router.use(authenticateToken);
 
-// Routes
+// Static routes first
 router.post("/", validateBody(createOrderSchema), createOrder);
-router.patch("/:orderId/status", validateBody(updateStatusSchema), updateOrderStatus);
-router.get("/:orderId", getOrder);
 router.get("/client", validateQuery(getOrdersSchema), getClientOrders);
 router.get("/freelancer", validateQuery(getOrdersSchema), getFreelancerOrders);
-router.patch("/:orderId/cancel", validateBody(cancelOrderSchema), cancelOrder);
 router.get("/current", getCurrentOrders);
-router.get("/pending", getPendingOrders);
-router.get("/completed", getCompletedOrders);
+router.get("/pending", getPendingOrders); // Moved up
+router.get("/completed", getCompletedOrders); // Moved up
+
+// Dynamic routes last
+router.patch("/:orderId/status", validateBody(updateStatusSchema), updateOrderStatus);
+router.patch("/:orderId/cancel", validateBody(cancelOrderSchema), cancelOrder);
+router.get("/:orderId", getOrder); // Moved down
 
 export default router;
