@@ -14,13 +14,15 @@ const router = express.Router();
 
 // Public routes
 router.get("/all", getAllGigs);
-router.get("/:gigId", getGig);
 
 // Protected routes
 router.use(authenticateToken);
-router.post("/", createGig); // No additional middleware needed; multer is in controller
+router.get("/freelancer", getFreelancerGigs); // Specific route BEFORE wildcard
+router.post("/", createGig);
 router.put("/gigs/:gigId", checkOwnership("Gig", "gigId", "freelancerId"), updateGig);
 router.delete("/:gigId", deleteGig);
-router.get("/freelancer", getFreelancerGigs);
+
+// Public route - AFTER specific routes
+router.get("/:gigId", getGig); // Wildcard route LAST
 
 export default router;

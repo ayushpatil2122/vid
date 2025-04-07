@@ -126,6 +126,7 @@ model FreelancerProfile {
   totalEarnings     Float     @default(0.0)
   rating            Float     @default(0.0)
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userBadges UserBadge[] // Links to badges
   gigs              Gig[]
   orders            Order[]   @relation("FreelancerOrders")
   reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
@@ -566,4 +567,22 @@ enum PromotionStatus {
   ACTIVE
   EXPIRED
   DISABLED
+}
+
+model Badge {
+  id          String    @id @default(uuid())
+  name        String    @unique
+  icon        String
+  color       String
+  description String
+  userBadges  UserBadge[]
+}
+
+model UserBadge {
+  id            String       @id @default(uuid())
+  freelancerId  Int          // Changed from userId to freelancerId
+  badgeId       String
+  earnedAt      DateTime     @default(now())
+  freelancer    FreelancerProfile @relation(fields: [freelancerId], references: [id])
+  badge         Badge        @relation(fields: [badgeId], references: [id])
 }

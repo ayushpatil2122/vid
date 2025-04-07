@@ -268,10 +268,10 @@ const getFreelancerGigs = async (req, res, next) => {
     if (!req.user || !req.user.id) {
       return next(new ApiError(401, "Unauthorized: User not authenticated"));
     }
-    const freelancerId = req.user.id;
+    const userId = req.user.id;
 
     const freelancerProfile = await prisma.freelancerProfile.findUnique({
-      where: { userId: freelancerId },
+      where: { userId },
     });
     console.log("Freelancer profile:", freelancerProfile); // Debug
     if (!freelancerProfile) {
