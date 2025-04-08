@@ -144,18 +144,18 @@ const loginUser = async (req, res, next) => {
   }
 };
 
-// Fetch current user's profile
+// Fetch user profile (own or public)
 const getUserProfile = async (req, res, next) => {
   try {
-    console.log("getUserProfile: req.user:", req.user);
-    if (!req.user || !req.user.id) {
-      console.log("getUserProfile: No user ID from token");
+    const userId = req.params.userId || req.user?.id;
+    if (!userId) {
+      console.log("getUserProfile: No user ID from token or params");
       return next(new ApiError(401, "Unauthorized: No user ID provided"));
     }
 
-    const userId = req.user.id;
+    const parsedUserId = parseInt(userId); // Convert to integer
     const user = await prisma.user.findUnique({
-      where: { id: userId },
+      where: { id: parsedUserId },
       select: {
         id: true,
         firstname: true,
@@ -171,6 +171,12 @@ const getUserProfile = async (req, res, next) => {
         createdAt: true,
         company: true,
         companyEmail: true,
+        lastNameChange: true,
+        isVerified: true,
+        totalJobs: true,
+        totalHours: true,
+        successRate: true,
+        rating: true,
         freelancerProfile: {
           select: {
             id: true,
@@ -194,8 +200,10 @@ const getUserProfile = async (req, res, next) => {
             weeklyHours: true,
             availabilityStatus: true,
             experienceLevel: true,
-            createdAt: true,
-            updatedAt: true,
+            portfolioVideos: true,
+            services: true,
+            gigs: true,
+            userBadges: { include: { badge: true } },
           },
         },
       },
@@ -207,7 +215,37 @@ const getUserProfile = async (req, res, next) => {
       return next(new ApiError(404, "User not found or account is deactivated"));
     }
 
-    return res.status(200).json(new ApiResponse(200, user, "User profile fetched successfully"));
+    const userResponse = {
+      id: user.id,
+      firstname: user.firstname,
+      lastname: user.lastname,
+      email: user.email,
+      country: user.country,
+      role: user.role,
+      company: user.company,
+      companyEmail: user.companyEmail,
+      isProfileComplete: user.isProfileComplete,
+      username: user.username,
+      profilePicture: user.profilePicture,
+      bio: user.bio,
+      isActive: user.isActive,
+      createdAt: user.createdAt,
+      lastNameChange: user.lastNameChange,
+      isVerified: user.isVerified,
+      totalJobs: user.totalJobs || 0,
+      totalHours: user.totalHours || 0,
+      successRate: user.successRate || 0,
+      rating: user.rating || 0,
+      freelancerProfile: user.freelancerProfile
+        ? {
+            ...user.freelancerProfile,
+            portfolio: user.freelancerProfile.portfolioVideos,
+            gigs: user.freelancerProfile.gigs,
+          }
+        : null,
+    };
+
+    return res.status(200).json(new ApiResponse(200, userResponse, "User profile fetched successfully"));
   } catch (error) {
     console.error("Error fetching user profile:", error.message, error.stack);
     return next(new ApiError(500, "Failed to fetch user profile", error.message));
@@ -237,6 +275,11 @@ const updateUser = async (req, res, next) => {
       jobTitle,
       overview,
       skills,
+      isVerified,
+      portfolioVideos,
+      services,
+      gigs,
+      userBadges,
       languages,
       socialLinks,
       tools,
@@ -252,7 +295,7 @@ const updateUser = async (req, res, next) => {
       availabilityStatus,
       experienceLevel,
     } = req.body;
-    const profilePicture = req.fileUrl || req.body.profilePicture; // Use S3 URL or body value
+    const profilePicture = req.fileUrl || req.body.profilePicture;
 
     console.log("Update payload:", req.body, "File URL:", profilePicture);
 
@@ -262,6 +305,15 @@ const updateUser = async (req, res, next) => {
     });
     if (!user || !user.isActive) {
       return next(new ApiError(404, "User not found or account is deactivated"));
+    }
+
+    // Name change restriction
+    if ((firstname || lastname) && user.lastNameChange) {
+      const lastChange = new Date(user.lastNameChange);
+      const now = new Date();
+      if ((now - lastChange) / (1000 * 60 * 60 * 24 * 30) < 3) {
+        return next(new ApiError(400, "Name can only be changed every 3 months"));
+      }
     }
 
     const userUpdateData = {};
@@ -292,12 +344,18 @@ const updateUser = async (req, res, next) => {
       if (companyEmail && !emailRegex.test(companyEmail)) {
         return next(new ApiError(400, "Invalid company email format"));
       }
-      if (companyEmail && companyEmail !== user.companyEmail && (await prisma.user.findFirst({ where: { companyEmail } }))) {
+      if (
+        companyEmail &&
+        companyEmail !== user.companyEmail &&
+        (await prisma.user.findFirst({ where: { companyEmail } }))
+      ) {
         return next(new ApiError(400, "Company email is already in use"));
       }
       userUpdateData.companyEmail = companyEmail;
     }
     if (profilePicture !== undefined) userUpdateData.profilePicture = profilePicture;
+    if (isVerified !== undefined) userUpdateData.isVerified = isVerified;
+    if (firstname || lastname) userUpdateData.lastNameChange = new Date();
 
     let freelancerProfileUpdateData = {};
     if (user.role === "FREELANCER") {
@@ -322,6 +380,16 @@ const updateUser = async (req, res, next) => {
         weeklyHours: weeklyHours !== undefined ? parseInt(weeklyHours) : user.freelancerProfile?.weeklyHours,
         availabilityStatus: availabilityStatus !== undefined ? availabilityStatus : user.freelancerProfile?.availabilityStatus,
         experienceLevel: experienceLevel !== undefined ? experienceLevel : user.freelancerProfile?.experienceLevel,
+        portfolioVideos: portfolioVideos !== undefined ? portfolioVideos : user.freelancerProfile?.portfolioVideos,
+        services: services !== undefined ? services : user.freelancerProfile?.services,
+        gigs: gigs !== undefined ? gigs : user.freelancerProfile?.gigs,
+        userBadges: userBadges && {
+          upsert: userBadges.map((b) => ({
+            where: { id: b.id || "" },
+            update: { isVisible: b.isVisible },
+            create: { badgeId: b.badgeId, isVisible: b.isVisible },
+          })),
+        },
       };
     }
 
@@ -329,18 +397,20 @@ const updateUser = async (req, res, next) => {
       where: { id: userId },
       data: {
         ...userUpdateData,
-        freelancerProfile: user.role === "FREELANCER" && Object.keys(freelancerProfileUpdateData).length > 0 ? {
-          upsert: {
-            update: freelancerProfileUpdateData,
-            create: freelancerProfileUpdateData,
-          },
-        } : undefined,
+        freelancerProfile: user.role === "FREELANCER" && Object.keys(freelancerProfileUpdateData).length > 0
+          ? {
+              upsert: {
+                update: freelancerProfileUpdateData,
+                create: freelancerProfileUpdateData,
+              },
+            }
+          : undefined,
       },
       include: { freelancerProfile: true },
     });
 
     if (user.role === "FREELANCER") {
-      const isComplete = !!isFreelancerProfileComplete(updatedUser.freelancerProfile); // Ensure boolean
+      const isComplete = !!isFreelancerProfileComplete(updatedUser.freelancerProfile);
       if (isComplete !== updatedUser.isProfileComplete) {
         await prisma.user.update({
           where: { id: userId },
@@ -379,6 +449,85 @@ const updateUser = async (req, res, next) => {
   }
 };
 
+// Delete specific item (portfolio, services, gigs)
+const deleteItem = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+    const userId = req.user.id;
+    const { type, id } = req.params;
+
+    const validTypes = ["portfolio", "services", "gigs"];
+    if (!validTypes.includes(type)) {
+      return next(new ApiError(400, "Invalid type. Must be portfolio, services, or gigs"));
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { freelancerProfile: { include: { portfolioVideos: true, gigs: true } } },
+    });
+    if (!user || !user.isActive) {
+      return next(new ApiError(404, "User not found or account is deactivated"));
+    }
+
+    if (!user.freelancerProfile) {
+      return next(new ApiError(404, "Freelancer profile not found"));
+    }
+
+    if (type === "portfolio") {
+      await prisma.portfolioVideo.delete({
+        where: { id: parseInt(id), freelancerId: user.freelancerProfile.id },
+      });
+    } else if (type === "services") {
+      const currentServices = user.freelancerProfile.services || [];
+      const updatedServices = currentServices.filter((item) => item.id !== id);
+      await prisma.freelancerProfile.update({
+        where: { id: user.freelancerProfile.id },
+        data: { services: updatedServices },
+      });
+    } else if (type === "gigs") {
+      await prisma.gig.delete({
+        where: { id: parseInt(id), freelancerId: user.freelancerProfile.id },
+      });
+    }
+
+    const updatedUser = await prisma.user.findUnique({
+      where: { id: userId },
+      include: { freelancerProfile: { include: { portfolioVideos: true, gigs: true } } },
+    });
+
+    const userResponse = {
+      id: updatedUser.id,
+      firstname: updatedUser.firstname,
+      lastname: updatedUser.lastname,
+      email: updatedUser.email,
+      country: updatedUser.country,
+      username: updatedUser.username,
+      role: updatedUser.role,
+      profilePicture: updatedUser.profilePicture,
+      bio: updatedUser.bio,
+      isActive: updatedUser.isActive,
+      isProfileComplete: updatedUser.isProfileComplete,
+      createdAt: updatedUser.createdAt,
+      company: updatedUser.company,
+      companyEmail: updatedUser.companyEmail,
+      freelancerProfile: updatedUser.freelancerProfile
+        ? {
+            ...updatedUser.freelancerProfile,
+            portfolio: updatedUser.freelancerProfile.portfolioVideos,
+            gigs: updatedUser.freelancerProfile.gigs,
+          }
+        : null,
+    };
+
+    return res.status(200).json(new ApiResponse(200, userResponse, `${type} item deleted successfully`));
+  } catch (error) {
+    console.error("Error deleting item:", error);
+    return next(new ApiError(500, "Failed to delete item", error.message));
+  }
+};
+
 // Deactivate user account
 const deleteUser = async (req, res, next) => {
   try {
@@ -405,4 +554,17 @@ const deleteUser = async (req, res, next) => {
   }
 };
 
-export { registerUser, loginUser, getUserProfile, updateUser, deleteUser };
+// Fetch all available badges
+const getAllBadges = async (req, res, next) => {
+  try {
+    const badges = await prisma.badge.findMany({
+      select: { id: true, name: true, icon: true, color: true, description: true },
+    });
+    return res.status(200).json(new ApiResponse(200, badges, "Badges fetched successfully"));
+  } catch (error) {
+    console.error("Error fetching badges:", error);
+    return next(new ApiError(500, "Failed to fetch badges", error.message));
+  }
+};
+
+export { registerUser, loginUser, getUserProfile, updateUser, deleteItem, deleteUser, getAllBadges };

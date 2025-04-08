@@ -26,6 +26,12 @@ model User {
   updatedAt     DateTime  @default(now()) @updatedAt
   isActive      Boolean   @default(true)
   isProfileComplete Boolean @default(false) // Tracks completion for all roles
+  lastNameChange DateTime?
+  isVerified     Boolean   @default(false)
+  totalJobs         Int      @default(0)  // New field
+  totalHours        Int      @default(0)  // New field
+  successRate       Float    @default(0)  // New field
+  rating            Float    @default(0)  // New field
 
   // Relationships
   freelancerProfile FreelancerProfile?
@@ -108,15 +114,15 @@ model FreelancerProfile {
   jobTitle          String?
   overview          String?
   skills            String[]
-  languages         String[]  // Add if "language" is separate from skills
-  socialLinks       Json?             // Added
+  languages         String[]
+  socialLinks       Json?
   portfolioVideos   PortfolioVideo[]
   tools             String[]
   equipmentCameras  String?
   equipmentLenses   String?
   equipmentLighting String?
   equipmentOther    String?
-  certifications    String[]  @default([]) // Changed from String? to String[]
+  certifications    String[]  @default([])
   minimumRate       Float?
   maximumRate       Float?
   availabilityStatus Availability @default(UNAVAILABLE)
@@ -125,8 +131,11 @@ model FreelancerProfile {
   experienceLevel   ExperienceLevel @default(ENTRY)
   totalEarnings     Float     @default(0.0)
   rating            Float     @default(0.0)
+  createdAt         DateTime  @default(now())  // Added
+  updatedAt         DateTime  @default(now()) @updatedAt  // Added
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userBadges UserBadge[] // Links to badges
+  userBadges        UserBadge[]
+  services          Json?
   gigs              Gig[]
   orders            Order[]   @relation("FreelancerOrders")
   reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
@@ -579,10 +588,11 @@ model Badge {
 }
 
 model UserBadge {
-  id            String       @id @default(uuid())
-  freelancerId  Int          // Changed from userId to freelancerId
-  badgeId       String
-  earnedAt      DateTime     @default(now())
-  freelancer    FreelancerProfile @relation(fields: [freelancerId], references: [id])
-  badge         Badge        @relation(fields: [badgeId], references: [id])
+  id           String          @id @default(uuid())
+  freelancerId Int
+  badgeId      String
+  earnedAt     DateTime        @default(now())
+  isVisible    Boolean         @default(true)
+  freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id])
+  badge        Badge           @relation(fields: [badgeId], references: [id])
 }

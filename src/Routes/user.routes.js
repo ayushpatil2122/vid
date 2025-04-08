@@ -5,6 +5,8 @@ import {
   updateUser,
   getUserProfile,
   deleteUser,
+  deleteItem,
+  getAllBadges,
 } from "../Controllers/user.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody } from "../Middlewares/validate.middleware.js";
@@ -29,7 +31,6 @@ const loginUserSchema = Joi.object({
 });
 
 const updateUserSchema = Joi.object({
-  // User fields
   firstname: Joi.string().optional(),
   lastname: Joi.string().optional(),
   email: Joi.string().email().optional(),
@@ -39,8 +40,12 @@ const updateUserSchema = Joi.object({
   bio: Joi.string().allow("").optional(),
   company: Joi.string().allow("").optional(),
   companyEmail: Joi.string().email().allow("").optional(),
-  profilePicture: Joi.any().optional(), // Handled by multer
-  // FreelancerProfile fields
+  profilePicture: Joi.any().optional(),
+  isVerified: Joi.boolean().optional(),
+  portfolio: Joi.array().items(Joi.object({ id: Joi.string(), title: Joi.string(), category: Joi.string(), url: Joi.string() })).optional(),
+  services: Joi.array().items(Joi.object({ id: Joi.string(), title: Joi.string(), description: Joi.string() })).optional(),
+  gigs: Joi.array().items(Joi.object({ id: Joi.string(), title: Joi.string(), price: Joi.string(), description: Joi.string(), deliveryTime: Joi.string() })).optional(),
+  userBadges: Joi.array().items(Joi.object({ id: Joi.string(), badgeId: Joi.string(), isVisible: Joi.boolean() })).optional(),
   city: Joi.string().allow("").optional(),
   pinCode: Joi.string().allow("").optional(),
   state: Joi.string().allow("").optional(),
@@ -48,7 +53,7 @@ const updateUserSchema = Joi.object({
   overview: Joi.string().allow("").optional(),
   skills: Joi.array().items(Joi.string()).optional(),
   languages: Joi.array().items(Joi.string()).optional(),
-  socialLinks: Joi.object().optional(), // JSON object for social links
+  socialLinks: Joi.object().optional(),
   tools: Joi.array().items(Joi.string()).optional(),
   equipmentCameras: Joi.string().allow("").optional(),
   equipmentLenses: Joi.string().allow("").optional(),
@@ -61,11 +66,12 @@ const updateUserSchema = Joi.object({
   weeklyHours: Joi.number().integer().optional(),
   availabilityStatus: Joi.string().valid("FULL_TIME", "PART_TIME", "UNAVAILABLE").optional(),
   experienceLevel: Joi.string().valid("ENTRY", "INTERMEDIATE", "EXPERT").optional(),
-}).min(1); // At least one field must be provided
+}).min(1);
 
 // Public routes
 router.post("/register", validateBody(registerUserSchema), registerUser);
 router.post("/login", validateBody(loginUserSchema), loginUser);
+router.get("/profile/:userId", getUserProfile); // Public profile view
 
 // Protected routes
 router.use(authenticateToken);
@@ -73,5 +79,7 @@ router.use(authenticateToken);
 router.get("/me", getUserProfile);
 router.patch("/me", uploadSingle("profilePicture"), validateBody(updateUserSchema), updateUser);
 router.delete("/delete", deleteUser);
+router.delete("/me/:type/:id", deleteItem); // Delete specific item (portfolio, services, gigs)
+router.get("/badges", getAllBadges); // Fetch all badges
 
 export default router;
