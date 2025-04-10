@@ -1,4 +1,3 @@
-// src/routes/jobRoutes.js
 import express from "express";
 import {
   createJob,
@@ -16,41 +15,40 @@ import Joi from "joi";
 const router = express.Router();
 
 const jobSchema = Joi.object({
-  title: Joi.string().required(),
-  description: Joi.string().required(),
-  category: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).required(),
+  title: Joi.string().max(100).required().messages({ "string.max": "Title must be 100 characters or less" }),
+  description: Joi.string().max(5000).required().messages({ "string.max": "Description must be 5000 characters or less" }),
+  category: Joi.array().items(Joi.string().max(50)).min(1).required().messages({ "array.min": "At least one category is required" }),
   budgetMin: Joi.number().positive().required(),
   budgetMax: Joi.number().positive().greater(Joi.ref("budgetMin")).required(),
   deadline: Joi.date().greater("now").required(),
   jobDifficulty: Joi.string().valid("EASY", "INTERMEDIATE", "HARD").required(),
   projectLength: Joi.string().valid("SHORT_TERM", "MEDIUM_TERM", "LONG_TERM").required(),
-  keyResponsibilities: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).required(),
-  requiredSkills: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).required(),
-  tools: Joi.alternatives().try(Joi.string(), Joi.array().items(Joi.string())).optional(),
-  scope: Joi.string().required(),
-  name: Joi.string().required(),
+  keyResponsibilities: Joi.array().items(Joi.string().max(100)).required(),
+  requiredSkills: Joi.array().items(Joi.string().max(100)).min(1).required().messages({ "array.min": "At least one skill is required" }),
+  tools: Joi.array().items(Joi.string().max(100)).optional(),
+  scope: Joi.string().max(5000).required(),
+  name: Joi.string().max(100).required(),
   email: Joi.string().email().required(),
-  company: Joi.string().optional(),
-  note: Joi.string().optional(),
-  videoFileUrl: Joi.string().uri().optional(),
+  company: Joi.string().max(100).optional(),
+  note: Joi.string().max(2000).optional(),
+  videoFileUrl: Joi.string().uri().optional(), // Optional if uploaded separately
 });
 
 const updateJobSchema = jobSchema.fork(Object.keys(jobSchema.describe().keys), field => field.optional()).min(1);
 
 const getJobsSchema = Joi.object({
   category: Joi.string().optional(),
-  search: Joi.string().optional(),
+  search: Joi.string().max(100).optional(),
   page: Joi.number().integer().min(1).default(1),
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
-// Public route
+// Public routes
 router.get("/all", validateQuery(getJobsSchema), getAllJobs);
 router.get("/:jobId", getJob);
 
 // Protected routes
 router.use(authenticateToken);
-
 router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob);
 router.put("/:jobId", uploadSingle("videoFile"), validateBody(updateJobSchema), updateJob);
 router.delete("/:jobId", deleteJob);

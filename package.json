@@ -30,6 +30,8 @@
     "passport-auth0": "^1.4.4",
     "prisma": "^6.2.1",
     "redis": "^4.7.0",
+    "sanitize": "^2.1.2",
+    "sanitize-html": "^2.15.0",
     "stripe": "^17.7.0"
   },
   "devDependencies": {

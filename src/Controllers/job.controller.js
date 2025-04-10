@@ -3,58 +3,49 @@ import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import prisma from "../prismaClient.js";
 
+// src/Controllers/job.controller.js (createJob only)
 const createJob = async (req, res, next) => {
   try {
     if (!req.user || !req.user.id) {
       return next(new ApiError(401, "Unauthorized: User not authenticated"));
     }
     const postedById = req.user.id;
+
     const {
       title, description, category, budgetMin, budgetMax, deadline, jobDifficulty,
       projectLength, keyResponsibilities, requiredSkills, tools, scope, name,
       email, company, note, videoFileUrl,
     } = req.body;
 
-    if (!title || !description || !category || !budgetMin || !budgetMax || !deadline || !jobDifficulty || !projectLength || !requiredSkills || !scope) {
-      return next(new ApiError(400, "Missing required fields. Please provide all necessary job details"));
-    }
-
-    const minBudget = parseFloat(budgetMin);
-    const maxBudget = parseFloat(budgetMax);
-    if (isNaN(minBudget) || isNaN(maxBudget) || minBudget < 0 || maxBudget < minBudget) {
-      return next(new ApiError(400, "Invalid budget values. Ensure budgetMin is positive and less than budgetMax"));
-    }
-
-    const parsedDeadline = new Date(deadline);
-    if (isNaN(parsedDeadline.getTime()) || parsedDeadline < new Date()) {
-      return next(new ApiError(400, "Invalid deadline. Please provide a future date"));
-    }
-
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!email || !emailRegex.test(email)) {
-      return next(new ApiError(400, "Invalid email format"));
+    let finalVideoFileUrl = videoFileUrl;
+    if (req.files && req.files.videoFile) {
+      const file = req.files.videoFile;
+      if (!file.mimetype.startsWith("video/")) {
+        return next(new ApiError(400, "Invalid file type. Only videos are allowed"));
+      }
+      finalVideoFileUrl = await uploadFileToS3(file, `jobs/${postedById}/${Date.now()}-${file.name}`);
     }
 
     const job = await prisma.job.create({
       data: {
         title,
         description,
-        category: Array.isArray(category) ? category : [category],
-        budgetMin: minBudget,
-        budgetMax: maxBudget,
-        deadline: parsedDeadline,
+        category,
+        budgetMin,
+        budgetMax,
+        deadline: new Date(deadline),
         jobDifficulty,
         projectLength,
-        keyResponsibilities: Array.isArray(keyResponsibilities) ? keyResponsibilities : keyResponsibilities ? [keyResponsibilities] : [],
-        requiredSkills: Array.isArray(requiredSkills) ? requiredSkills : [requiredSkills],
-        tools: Array.isArray(tools) ? tools : tools ? [tools] : [],
+        keyResponsibilities,
+        requiredSkills,
+        tools: tools || [], // Handle optional field
         scope,
         postedById,
         name,
         email,
         company,
         note,
-        videoFileUrl,
+        videoFileUrl: finalVideoFileUrl,
       },
       include: { postedBy: { select: { firstname: true, lastname: true } } },
     });
@@ -65,7 +56,6 @@ const createJob = async (req, res, next) => {
     return next(new ApiError(500, "Failed to post job", error.message));
   }
 };
-
 const updateJob = async (req, res, next) => {
   try {
     if (!req.user || !req.user.id) {
