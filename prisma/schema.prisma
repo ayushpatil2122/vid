@@ -176,15 +176,16 @@ model Gig {
   title         String
   description   String?
   category      String?
-  pricing       Json
+  pricing       Json // Or use GigPricing[] for typed structure
   deliveryTime  Int?
   revisionCount Int?
   status        GigStatus @default(ACTIVE)
-  tags          String[]
+  tags          String[]  @default([])
   requirements  String?
+  thumbnailUrl  String?   // Dedicated thumbnail field
   sampleMedia   GigSampleMedia[]
-  faqs          Json?
-  packageDetails Json?
+  faqs          Json?     @default("[]")
+  packageDetails Json?    @default("[]")
   isFeatured    Boolean   @default(false)
   views         Int       @default(0)
   createdAt     DateTime  @default(now())
@@ -218,6 +219,7 @@ enum MediaType {
   IMAGE
   AUDIO
   DOCUMENT
+  THUMBNAIL
 }
 
 // Order model (Enhanced)

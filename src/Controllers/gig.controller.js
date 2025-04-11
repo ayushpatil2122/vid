@@ -28,7 +28,7 @@ const upload = multer({
   },
 }).fields([
   { name: "thumbnail", maxCount: 1 },
-  { name: "sampleMedia", maxCount: 3 }, // Adjust maxCount as needed
+  { name: "sampleMedia", maxCount: 3 },
 ]);
 
 const createGig = async (req, res, next) => {
@@ -84,7 +84,7 @@ const createGig = async (req, res, next) => {
       if (req.files?.thumbnail?.[0]) {
         sampleMediaData.push({
           mediaUrl: `/uploads/${req.files.thumbnail[0].filename}`,
-          mediaType: req.files.thumbnail[0].mimetype.split("/")[1] === "mp4" ? "video" : "thumbnail", // Distinguish thumbnail
+          mediaType: req.files.thumbnail[0].mimetype.split("/")[1] === "mp4" ? "video" : "thumbnail",
         });
       }
 
@@ -111,7 +111,7 @@ const createGig = async (req, res, next) => {
           requirements,
           faqs: parsedFaqs,
           packageDetails: parsedPackageDetails,
-          sampleMedia: { create: sampleMediaData }, // Create related sample media
+          sampleMedia: { create: sampleMediaData },
         },
         include: { sampleMedia: true },
       });
@@ -124,6 +124,214 @@ const createGig = async (req, res, next) => {
       return next(new ApiError(500, "Failed to create gig", error.message));
     }
   });
+};
+
+// New function: Create Gig Draft
+const createGigDraft = async (req, res, next) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return next(new ApiError(400, err.message));
+    }
+
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const freelancerId = req.user.id;
+
+      const {
+        title, description, category, pricing, deliveryTime, revisionCount,
+        tags, requirements, faqs, packageDetails,
+      } = req.body;
+
+      // Minimal validation for drafts
+      if (!title) {
+        return next(new ApiError(400, "Title is required for drafts."));
+      }
+
+      const freelancerProfile = await prisma.freelancerProfile.findUnique({
+        where: { userId: freelancerId },
+      });
+      if (!freelancerProfile) {
+        return next(new ApiError(404, "Freelancer profile not found. Create a profile first."));
+      }
+
+      const parsedPricing = pricing ? JSON.parse(pricing) : [];
+      const parsedTags = tags ? JSON.parse(tags) : [];
+      const parsedFaqs = faqs ? JSON.parse(faqs) : [];
+      const parsedPackageDetails = packageDetails ? JSON.parse(packageDetails) : [];
+      const parsedDeliveryTime = deliveryTime ? parseInt(deliveryTime) : null;
+
+      const sampleMediaData = [];
+      if (req.files?.thumbnail?.[0]) {
+        sampleMediaData.push({
+          mediaUrl: `/uploads/${req.files.thumbnail[0].filename}`,
+          mediaType: req.files.thumbnail[0].mimetype.split("/")[1] === "mp4" ? "video" : "thumbnail",
+        });
+      }
+      if (req.files?.sampleMedia) {
+        req.files.sampleMedia.forEach(file => {
+          sampleMediaData.push({
+            mediaUrl: `/uploads/${file.filename}`,
+            mediaType: file.mimetype.split("/")[1] === "mp4" ? "video" : "image",
+          });
+        });
+      }
+
+      const gig = await prisma.gig.create({
+        data: {
+          freelancerId: freelancerProfile.id,
+          title,
+          description: description || null,
+          category: category || null,
+          pricing: parsedPricing.length > 0 ? parsedPricing : [],
+          deliveryTime: parsedDeliveryTime,
+          revisionCount: revisionCount ? parseInt(revisionCount) : null,
+          status: "DRAFT",
+          tags: parsedTags,
+          requirements: requirements || null,
+          faqs: parsedFaqs.length > 0 ? parsedFaqs : [],
+          packageDetails: parsedPackageDetails.length > 0 ? parsedPackageDetails : [],
+          sampleMedia: { create: sampleMediaData },
+        },
+        include: { sampleMedia: true },
+      });
+
+      return res.status(201).json(
+        new ApiResponse(201, gig, "Gig draft saved successfully")
+      );
+    } catch (error) {
+      console.error("Error saving gig draft:", error);
+      return next(new ApiError(500, "Failed to save gig draft", error.message));
+    }
+  });
+};
+
+// New function: Update Gig Draft
+const updateGigDraft = async (req, res, next) => {
+  upload(req, res, async (err) => {
+    if (err) {
+      return next(new ApiError(400, err.message));
+    }
+
+    try {
+      if (!req.user || !req.user.id) {
+        return next(new ApiError(401, "Unauthorized: User not authenticated"));
+      }
+      const freelancerId = req.user.id;
+      const { gigId } = req.params;
+
+      const {
+        title, description, category, pricing, deliveryTime, revisionCount,
+        tags, requirements, faqs, packageDetails,
+      } = req.body;
+
+      const gig = await prisma.gig.findUnique({
+        where: { id: parseInt(gigId) },
+        include: { freelancer: true },
+      });
+      if (!gig) {
+        return next(new ApiError(404, "Gig draft not found."));
+      }
+      if (gig.freelancer.userId !== freelancerId) {
+        return next(new ApiError(403, "Forbidden: You can only update your own gig drafts."));
+      }
+      if (gig.status !== "DRAFT") {
+        return next(new ApiError(400, "This gig is not a draft and cannot be updated as one."));
+      }
+
+      // Minimal validation: title must still exist
+      if (!title) {
+        return next(new ApiError(400, "Title is required for drafts."));
+      }
+
+      const parsedPricing = pricing ? JSON.parse(pricing) : gig.pricing;
+      const parsedTags = tags ? JSON.parse(tags) : gig.tags;
+      const parsedFaqs = faqs ? JSON.parse(faqs) : gig.faqs;
+      const parsedPackageDetails = packageDetails ? JSON.parse(packageDetails) : gig.packageDetails;
+      const parsedDeliveryTime = deliveryTime ? parseInt(deliveryTime) : gig.deliveryTime;
+
+      const sampleMediaData = [];
+      if (req.files?.thumbnail?.[0]) {
+        sampleMediaData.push({
+          mediaUrl: `/uploads/${req.files.thumbnail[0].filename}`,
+          mediaType: req.files.thumbnail[0].mimetype.split("/")[1] === "mp4" ? "video" : "thumbnail",
+        });
+      }
+      if (req.files?.sampleMedia) {
+        req.files.sampleMedia.forEach(file => {
+          sampleMediaData.push({
+            mediaUrl: `/uploads/${file.filename}`,
+            mediaType: file.mimetype.split("/")[1] === "mp4" ? "video" : "image",
+          });
+        });
+      }
+
+      const updatedGig = await prisma.gig.update({
+        where: { id: parseInt(gigId) },
+        data: {
+          title,
+          description: description !== undefined ? description : gig.description,
+          category: category !== undefined ? category : gig.category,
+          pricing: parsedPricing,
+          deliveryTime: parsedDeliveryTime,
+          revisionCount: revisionCount ? parseInt(revisionCount) : gig.revisionCount,
+          tags: parsedTags,
+          requirements: requirements !== undefined ? requirements : gig.requirements,
+          faqs: parsedFaqs,
+          packageDetails: parsedPackageDetails,
+          sampleMedia: sampleMediaData.length > 0 ? {
+            deleteMany: {},
+            create: sampleMediaData,
+          } : undefined,
+        },
+        include: { sampleMedia: true },
+      });
+
+      return res.status(200).json(
+        new ApiResponse(200, updatedGig, "Gig draft updated successfully")
+      );
+    } catch (error) {
+      console.error("Error updating gig draft:", error);
+      return next(new ApiError(500, "Failed to update gig draft", error.message));
+    }
+  });
+};
+
+// New function: Delete Gig Draft
+const deleteGigDraft = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+    const freelancerId = req.user.id;
+    const { gigId } = req.params;
+
+    const gig = await prisma.gig.findUnique({
+      where: { id: parseInt(gigId) },
+      include: { freelancer: true },
+    });
+    if (!gig) {
+      return next(new ApiError(404, "Gig draft not found."));
+    }
+    if (gig.freelancer.userId !== freelancerId) {
+      return next(new ApiError(403, "Forbidden: You can only delete your own gig drafts."));
+    }
+    if (gig.status !== "DRAFT") {
+      return next(new ApiError(400, "This gig is not a draft and cannot be deleted as one."));
+    }
+
+    await prisma.gig.delete({
+      where: { id: parseInt(gigId) },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(200, null, "Gig draft deleted successfully")
+    );
+  } catch (error) {
+    console.error("Error deleting gig draft:", error);
+    return next(new ApiError(500, "Failed to delete gig draft", error.message));
+  }
 };
 
 const updateGig = async (req, res, next) => {
@@ -172,7 +380,7 @@ const updateGig = async (req, res, next) => {
         faqs: faqs !== undefined ? faqs : gig.faqs,
         packageDetails: packageDetails !== undefined ? packageDetails : gig.packageDetails,
         sampleMedia: sampleMedia ? {
-          deleteMany: {}, // Clear existing media
+          deleteMany: {},
           create: sampleMedia.map(media => ({
             mediaUrl: media.mediaUrl,
             mediaType: media.mediaType,
@@ -293,14 +501,13 @@ const getFreelancerGigs = async (req, res, next) => {
   }
 };
 
-// src/controllers/gigController.js
 const getAllGigs = async (req, res, next) => {
   try {
     const { category, search, page = 1, limit = 10 } = req.query;
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {
-      status: "ACTIVE", // Only show active gigs
+      status: "ACTIVE",
     };
     if (category) {
       where.category = category;
@@ -322,8 +529,8 @@ const getAllGigs = async (req, res, next) => {
             select: { 
               user: { 
                 select: { 
-                  firstname: true, // Correct syntax: field name as key
-                  lastname: true  // Correct syntax: field name as key
+                  firstname: true,
+                  lastname: true,
                 } 
               } 
             } 
@@ -353,8 +560,11 @@ const getAllGigs = async (req, res, next) => {
 
 export {
   createGig,
+  createGigDraft, // Export new draft function
   updateGig,
+  updateGigDraft, // Export new draft update function
   deleteGig,
+  deleteGigDraft, // Export new draft delete function
   getGig,
   getFreelancerGigs,
   getAllGigs,

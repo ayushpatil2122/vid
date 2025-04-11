@@ -1,8 +1,11 @@
 import express from "express";
 import {
   createGig,
+  createGigDraft,
   updateGig,
+  updateGigDraft,
   deleteGig,
+  deleteGigDraft,
   getGig,
   getFreelancerGigs,
   getAllGigs,
@@ -17,12 +20,15 @@ router.get("/all", getAllGigs);
 
 // Protected routes
 router.use(authenticateToken);
-router.get("/freelancer", getFreelancerGigs); // Specific route BEFORE wildcard
+router.get("/freelancer", getFreelancerGigs);
 router.post("/", createGig);
+router.post("/draft", createGigDraft); // New endpoint for creating drafts
 router.put("/gigs/:gigId", checkOwnership("Gig", "gigId", "freelancerId"), updateGig);
+router.put("/draft/:gigId", checkOwnership("Gig", "gigId", "freelancerId"), updateGigDraft); // New endpoint for updating drafts
 router.delete("/:gigId", deleteGig);
+router.delete("/draft/:gigId", deleteGigDraft); // New endpoint for deleting drafts
 
 // Public route - AFTER specific routes
-router.get("/:gigId", getGig); // Wildcard route LAST
+router.get("/:gigId", getGig);
 
 export default router;
