@@ -10,8 +10,8 @@ const createOrder = async (req, res, next) => {
       }
       const clientId = req.user.id;
       const { gigId, selectedPackage, requirements, isUrgent, customDetails } = req.body;
-  
-      // Validate required fields
+
+
       if (!gigId || !selectedPackage) {
         return next(new ApiError(400, "Gig ID and package are required"));
       }
@@ -24,12 +24,16 @@ const createOrder = async (req, res, next) => {
         return next(new ApiError(404, "Gig not found or not active"));
       }
   
-      const pricing = gig.pricing[selectedPackage];
-      if (!pricing) {
+      // Parse the pricing JSON if it's a string
+      const pricingData = typeof gig.pricing === 'string' ? JSON.parse(gig.pricing) : gig.pricing;
+      
+      // Find the selected package in the pricing array
+      const selectedPackageData = pricingData.find(pkg => pkg.name === selectedPackage);
+      if (!selectedPackageData) {
         return next(new ApiError(400, "Invalid package selected"));
       }
   
-      const totalPrice = isUrgent ? pricing * 1.5 : pricing; // Example: 50% premium for urgent
+      const totalPrice = isUrgent ? selectedPackageData.price * 1.5 : selectedPackageData.price;
       const orderNumber = `ORD-${new Date().getFullYear()}${String(new Date().getMonth() + 1).padStart(2, "0")}${String(new Date().getDate()).padStart(2, "0")}-${Math.random().toString(36).substr(2, 4).toUpperCase()}`; // Fixed string interpolation
   
       const order = await prisma.order.create({
@@ -37,11 +41,11 @@ const createOrder = async (req, res, next) => {
           gigId: gig.id,
           clientId,
           freelancerId: gig.freelancerId,
-          package: selectedPackage, // Updated field name in schema usage
+          package: selectedPackage,
           totalPrice,
           requirements,
           isUrgent: isUrgent || false,
-          priorityFee: isUrgent ? pricing * 0.5 : null,
+          priorityFee: isUrgent ? selectedPackageData.price * 0.5 : null,
           customDetails,
           orderNumber,
           deliveryDeadline: new Date(Date.now() + gig.deliveryTime * 24 * 60 * 60 * 1000), // Days to milliseconds
@@ -56,10 +60,7 @@ const createOrder = async (req, res, next) => {
       return next(new ApiError(500, "Failed to create order", error.message));
     }
   };
-  
-  // Rest of the functions (updateOrderStatus, getOrder, etc.) remain unaffected since they don’t use 'package' directly in destructuring
-  // However, ensure schema field 'package' is referenced correctly elsewhere
-  
+    
   const updateOrderStatus = async (req, res, next) => {
     try {
       if (!req.user || !req.user.id) {
@@ -161,38 +162,27 @@ const createOrder = async (req, res, next) => {
   };
 
   const getClientOrders = async (req, res, next) => {
+    console.log("getOrder client")
     try {
       if (!req.user || !req.user.id) {
         return next(new ApiError(401, "Unauthorized: User not authenticated"));
       }
       const clientId = req.user.id;
-      const { page = 1, limit = 10, status } = req.query;
-      const skip = (parseInt(page) - 1) * parseInt(limit);
   
-      const where = { clientId };
-      if (status) where.status = status;
-  
-      const [orders, total] = await Promise.all([
-        prisma.order.findMany({
-          where,
-          include: {
-            gig: true,
-            freelancer: { include: { user: { select: { firstname: true, lastname: true } } } }, // Fixed
-          },
-          skip,
-          take: parseInt(limit),
-          orderBy: { createdAt: "desc" },
-        }),
-        prisma.order.count({ where }),
-      ]);
-  
+      const orders = await prisma.order.findMany({
+        where : {
+          clientId : 1
+        },
+        include: {
+          gig: true,
+          freelancer: { include: { user: { select: { firstname: true, lastname: true } } } }, // Fixed
+        },
+        orderBy: { createdAt: "desc" },
+      })
+
       return res.status(200).json(
         new ApiResponse(200, {
           orders,
-          total,
-          page: parseInt(page),
-          limit: parseInt(limit),
-          totalPages: Math.ceil(total / limit),
         }, "Client orders retrieved successfully")
       );
     } catch (error) {

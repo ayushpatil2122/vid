@@ -158,6 +158,7 @@ const getUserProfile = async (req, res, next) => {
       where: { id: parsedUserId },
       select: {
         id: true,
+        appliedJobsId: true,
         firstname: true,
         lastname: true,
         email: true,

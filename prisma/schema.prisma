@@ -20,20 +20,18 @@ model User {
   role          Role      @default(CLIENT)
   profilePicture String?
   bio           String?
-  company       String?  // Added
-  companyEmail  String?  // Added
+  company       String?
+  companyEmail  String?
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @default(now()) @updatedAt
   isActive      Boolean   @default(true)
-  isProfileComplete Boolean @default(false) // Tracks completion for all roles
+  isProfileComplete Boolean @default(false)
   lastNameChange DateTime?
   isVerified     Boolean   @default(false)
-  totalJobs         Int      @default(0)  // New field
-  totalHours        Int      @default(0)  // New field
-  successRate       Float    @default(0)  // New field
-  rating            Float    @default(0)  // New field
-
-  // Relationships
+  totalJobs      Int      @default(0)
+  totalHours     Int      @default(0)
+  successRate    Float    @default(0)
+  rating         Float    @default(0)
   freelancerProfile FreelancerProfile?
   ordersAsClient    Order[]           @relation("ClientOrders")
   reviewsGiven      Review[]          @relation("ReviewsByClient")
@@ -51,6 +49,19 @@ model User {
   referredReferrals Referral[]        @relation("Referrer")
   receivedReferrals Referral[]        @relation("Referee")
   Promotion         Promotion[]
+  appliedJobsId     Int[]
+  applications      Application[]     @relation("FreelancerApplications")
+}
+
+model Application {
+  id              Int      @id @default(autoincrement())
+  jobId           Int
+  freelancerId    Int
+  aboutFreelancer String
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  job             Job      @relation(fields: [jobId], references: [id])
+  freelancer      User     @relation("FreelancerApplications", fields: [freelancerId], references: [id])
 }
 
 // Role Enum
@@ -88,8 +99,8 @@ model Job {
   categoryColor     String    @default("blue")
   createdAt         DateTime  @default(now())
   updatedAt         DateTime  @default(now()) @updatedAt
-
   postedBy          User      @relation("PostedBy", fields: [postedById], references: [id], onDelete: Cascade)
+  applications      Application[]
 }
 
 enum JobDifficulty {
@@ -597,4 +608,80 @@ model UserBadge {
   isVisible    Boolean         @default(true)
   freelancer   FreelancerProfile @relation(fields: [freelancerId], references: [id])
   badge        Badge           @relation(fields: [badgeId], references: [id])
+}
+
+enum SubmissionStatus {
+  PENDING
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// Enum for issue category
+enum IssueCategory {
+  TECHNICAL
+  BILLING
+  ACCOUNT
+  FEATURE
+  OTHER
+}
+
+// Enum for priority level
+enum PriorityLevel {
+  LOW
+  MEDIUM
+  HIGH
+  CRITICAL
+}
+
+// Enum for contact method
+enum ContactMethod {
+  EMAIL
+  PHONE
+  ANY
+}
+
+model ContactSubmission {
+  id              String          @id @default(uuid())
+  firstName       String
+  lastName        String
+  email           String          @db.VarChar(255)
+  phone           String?         @db.VarChar(20)
+  category        IssueCategory   @default(OTHER)
+  subject         String          @db.VarChar(255)
+  message         String          @db.Text
+  priority        PriorityLevel   @default(MEDIUM)
+  contactMethod   ContactMethod   @default(EMAIL)
+  status          SubmissionStatus @default(PENDING)
+  isResolved      Boolean         @default(false)
+  assignedAdminId String?         @db.VarChar(36) // UUID of admin, nullable
+  resolutionNotes String?         @db.Text // Notes on how the issue was resolved
+  lastActionAt    DateTime?       // Tracks last update or interaction
+  files           ContactFile[]   // Relation to uploaded files
+  createdBy       String?         @db.VarChar(36) // Optional: user ID who submitted (for logged-in users)
+  updatedBy       String?         @db.VarChar(36) // Optional: admin/user who last updated
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+
+  // Indexes for faster queries
+  @@index([email])
+  @@index([status])
+  @@index([priority])
+  @@index([assignedAdminId])
+  @@index([createdAt])
+}
+
+model ContactFile {
+  id                  String          @id @default(uuid())
+  contactSubmission   ContactSubmission @relation(fields: [contactSubmissionId], references: [id], onDelete: Cascade)
+  contactSubmissionId String          @db.VarChar(36)
+  fileName            String?         @db.VarChar(255) // Original file name for reference
+  fileUrl             String          @db.VarChar(512) // URL to the uploaded file
+  fileType            String          @db.VarChar(100) // e.g., "image/jpeg"
+  fileSize            Int             // Size in bytes
+  description         String?         @db.Text         // Optional context (e.g., "Screenshot of error")
+  createdAt           DateTime        @default(now())
+
+  // Indexes for faster queries
+  @@index([contactSubmissionId])
 }

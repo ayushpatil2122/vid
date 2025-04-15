@@ -1,9 +1,74 @@
-// src/controllers/jobController.js
 import { ApiError } from "../Utils/ApiError.js";
 import { ApiResponse } from "../Utils/ApiResponse.js";
 import prisma from "../prismaClient.js";
 
-// src/Controllers/job.controller.js (createJob only)
+const applyJob = async (req, res, next) => {
+  try {
+    if (!req.user || !req.user.id) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+
+    const freelancerId = req.user.id;
+    const jobId = Number(req.params.jobId);
+    const { aboutFreelancer } = req.body;
+
+    // Validate role
+    if (req.user.role !== "FREELANCER") {
+      return next(new ApiError(403, "Only freelancers can apply for jobs"));
+    }
+
+    // Check if job exists
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+    });
+    if (!job) {
+      return next(new ApiError(404, "Job not found"));
+    }
+
+    // Check if user exists and is a freelancer
+    const freelancer = await prisma.user.findUnique({
+      where: { id: freelancerId },
+      include: { freelancerProfile: true },
+    });
+    if (!freelancer || !freelancer.freelancerProfile) {
+      return next(new ApiError(404, "Freelancer profile not found"));
+    }
+
+    // Check if already applied
+    const existingApplication = await prisma.application.findFirst({
+      where: { freelancerId, jobId },
+    });
+    if (existingApplication) {
+      return next(new ApiError(400, "You have already applied to this job"));
+    }
+
+    // Create the application
+    const appliedJob = await prisma.application.create({
+      data: {
+        aboutFreelancer,
+        freelancer: { connect: { id: freelancerId } },
+        job: { connect: { id: jobId } },
+      },
+    });
+
+    // Update the user's appliedJobsId array
+    await prisma.user.update({
+      where: { id: freelancerId },
+      data: {
+        appliedJobsId: { push: jobId },
+      },
+    });
+
+    return res.status(200).json(
+      new ApiResponse(200, { appliedJob }, "Applied to job successfully")
+    );
+  } catch (error) {
+    console.error("Error applying for job:", error);
+    return next(new ApiError(500, "Failed to apply for job: " + error.message));
+  }
+};
+
+// Other functions (unchanged)
 const createJob = async (req, res, next) => {
   try {
     if (!req.user || !req.user.id) {
@@ -38,7 +103,7 @@ const createJob = async (req, res, next) => {
         projectLength,
         keyResponsibilities,
         requiredSkills,
-        tools: tools || [], // Handle optional field
+        tools: tools || [],
         scope,
         postedById,
         name,
@@ -56,6 +121,7 @@ const createJob = async (req, res, next) => {
     return next(new ApiError(500, "Failed to post job", error.message));
   }
 };
+
 const updateJob = async (req, res, next) => {
   try {
     if (!req.user || !req.user.id) {
@@ -170,7 +236,6 @@ const getJob = async (req, res, next) => {
       return next(new ApiError(404, "Job not found"));
     }
 
-    // Increment proposals counter if viewed by a freelancer (optional logic)
     if (req.user && req.user.role === "FREELANCER" && req.user.id !== job.postedById) {
       await prisma.job.update({
         where: { id: parseInt(jobId) },
@@ -228,7 +293,7 @@ const getAllJobs = async (req, res, next) => {
     const skip = (parseInt(page) - 1) * parseInt(limit);
 
     const where = {
-      isVerified: true, // Only show verified jobs
+      isVerified: true,
     };
     if (category) {
       where.category = { has: category };
@@ -266,5 +331,25 @@ const getAllJobs = async (req, res, next) => {
     return next(new ApiError(500, "Failed to retrieve all jobs", error.message));
   }
 };
+const checkApplicationStatus = async (req, res, next) => {
+  try {
+    const jobId = parseInt(req.params.jobId);
+    const userId = req.user.id;
+    
+    const application = await prisma.application.findFirst({
+      where: {
+        jobId,
+        freelancerId: userId,
+      },
+    });
+    
+    return res.status(200).json(
+      new ApiResponse(200, { hasApplied: !!application }, "Application status retrieved")
+    );
+  } catch (error) {
+    console.error("Error in checkApplicationStatus:", error);
+    return next(new ApiError(500, "Failed to check application status"));
+  }
+};
 
-export { createJob, updateJob, deleteJob, getJob, getClientJobs, getAllJobs };
+export { createJob, updateJob, deleteJob, getJob, getClientJobs, getAllJobs, applyJob, checkApplicationStatus };

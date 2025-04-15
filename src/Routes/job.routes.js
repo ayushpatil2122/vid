@@ -6,6 +6,8 @@ import {
   getJob,
   getClientJobs,
   getAllJobs,
+  applyJob,
+  checkApplicationStatus,
 } from "../Controllers/job.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
@@ -31,7 +33,7 @@ const jobSchema = Joi.object({
   email: Joi.string().email().required(),
   company: Joi.string().max(100).optional(),
   note: Joi.string().max(2000).optional(),
-  videoFileUrl: Joi.string().uri().optional(), // Optional if uploaded separately
+  videoFileUrl: Joi.string().uri().optional(),
 });
 
 const updateJobSchema = jobSchema.fork(Object.keys(jobSchema.describe().keys), field => field.optional()).min(1);
@@ -49,9 +51,13 @@ router.get("/:jobId", getJob);
 
 // Protected routes
 router.use(authenticateToken);
+router.get("/apply/:jobId/status", authenticateToken, checkApplicationStatus);
 router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob);
 router.put("/:jobId", uploadSingle("videoFile"), validateBody(updateJobSchema), updateJob);
 router.delete("/:jobId", deleteJob);
 router.get("/", validateQuery(getJobsSchema), getClientJobs);
+router.post("/apply/:jobId", validateBody(Joi.object({
+  aboutFreelancer: Joi.string().max(5000).required(),
+})), applyJob);
 
 export default router;

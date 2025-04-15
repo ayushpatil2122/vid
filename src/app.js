@@ -20,6 +20,7 @@ import { rateLimiter } from "./Middlewares/ratelimit.middleware.js";
 import { errorHandler } from "./Middlewares/error.middleware.js";
 import freelancerRoutes from "./Routes/freelancer.routes.js";
 import portfolioRoutes from "./Routes/portfolio.routes.js";
+import contactRoutes from "./Routes/contact.routes.js"
 
 const app = express();
 
@@ -64,6 +65,7 @@ app.use("/api/v1/referrals", referralRouter);
 app.use("/api/v1/promotions", promotionRouter);
 app.use("/api/v1/freelancer", freelancerRoutes);
 app.use("/api/v1/portfolio", portfolioRoutes);
+app.use("/api/v1/contact", contactRoutes);
 
 
 
