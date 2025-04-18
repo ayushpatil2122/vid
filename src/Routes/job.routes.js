@@ -51,7 +51,7 @@ router.get("/:jobId", getJob);
 
 // Protected routes
 router.use(authenticateToken);
-router.get("/apply/:jobId/status", authenticateToken, checkApplicationStatus);
+router.get("/apply/status/:jobId", checkApplicationStatus);
 router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob);
 router.put("/:jobId", uploadSingle("videoFile"), validateBody(updateJobSchema), updateJob);
 router.delete("/:jobId", deleteJob);
