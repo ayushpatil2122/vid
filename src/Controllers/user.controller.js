@@ -568,4 +568,272 @@ const getAllBadges = async (req, res, next) => {
   }
 };
 
-export { registerUser, loginUser, getUserProfile, updateUser, deleteItem, deleteUser, getAllBadges };
+const getAllFreelancers = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+
+    const { page = 1, limit = 10, search, skills, location, experienceLevel } = req.query;
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Build where clause for filtering
+    const where = {
+      role: "FREELANCER",
+      AND: [],
+    };
+
+    if (search) {
+      where.AND.push({
+        OR: [
+          { firstname: { contains: search, mode: "insensitive" } },
+          { lastname: { contains: search, mode: "insensitive" } },
+          { bio: { contains: search, mode: "insensitive" } },
+          { freelancerProfile: { jobTitle: { contains: search, mode: "insensitive" } } },
+        ],
+      });
+    }
+
+    if (skills) {
+      const skillArray = skills.split(",").map((s) => s.trim());
+      where.AND.push({
+        freelancerProfile: { skills: { hasSome: skillArray } },
+      });
+    }
+
+    if (location) {
+      where.AND.push({
+        OR: [
+          { country: { contains: location, mode: "insensitive" } },
+          { freelancerProfile: { city: { contains: location, mode: "insensitive" } } },
+        ],
+      });
+    }
+
+    if (experienceLevel) {
+      where.AND.push({
+        freelancerProfile: { experienceLevel: experienceLevel.toUpperCase() },
+      });
+    }
+
+    // Fetch freelancers with related data
+    const [freelancers, total] = await Promise.all([
+      prisma.user.findMany({
+        where,
+        select: {
+          id: true,
+          firstname: true,
+          lastname: true,
+          username: true,
+          bio: true,
+          country: true,
+          profilePicture: true,
+          createdAt: true,
+          updatedAt: true,
+          rating: true,
+          freelancerProfile: {
+            select: {
+              city: true,
+              jobTitle: true,
+              overview: true,
+              skills: true,
+              languages: true,
+              tools: true,
+              certifications: true,
+              minimumRate: true,
+              maximumRate: true,
+              hourlyRate: true,
+              weeklyHours: true,
+              availabilityStatus: true,
+              experienceLevel: true,
+              socialLinks: true,
+              equipmentCameras: true,
+              equipmentLenses: true,
+              equipmentLighting: true,
+              equipmentOther: true,
+              totalEarnings: true,
+              rating: true,
+              software: {
+                select: { id: true, name: true, icon: true, level: true },
+              },
+              portfolioVideos: {
+                select: { id: true, title: true, videoUrl: true},
+              },
+              gigs: {
+                select: { id: true, title: true, pricing: true, description: true, deliveryTime: true },
+              },
+              userBadges: {
+                select: { id: true, badgeId: true, isVisible: true },
+              },
+            },
+          },
+        },
+        skip,
+        take: parseInt(limit),
+        orderBy: { createdAt: "desc" },
+      }),
+      prisma.user.count({ where }),
+    ]);
+
+    // Format response, handle missing fields
+    const formattedFreelancers = freelancers.map((freelancer) => ({
+      id: freelancer.id,
+      name: `${freelancer.firstname || ""} ${freelancer.lastname || ""}`.trim() || "Unnamed Freelancer",
+      username: freelancer.username || null,
+      bio: freelancer.bio || "",
+      country: freelancer.country || "",
+      city: freelancer.freelancerProfile?.city || "",
+      profilePicture: freelancer.profilePicture || "",
+      jobTitle: freelancer.freelancerProfile?.jobTitle || "",
+      overview: freelancer.freelancerProfile?.overview || "",
+      skills: freelancer.freelancerProfile?.skills || [],
+      languages: freelancer.freelancerProfile?.languages || [],
+      tools: freelancer.freelancerProfile?.tools || [],
+      certifications: freelancer.freelancerProfile?.certifications || [],
+      minimumRate: freelancer.freelancerProfile?.minimumRate || null,
+      maximumRate: freelancer.freelancerProfile?.maximumRate || null,
+      hourlyRate: freelancer.freelancerProfile?.hourlyRate || null,
+      weeklyHours: freelancer.freelancerProfile?.weeklyHours || null,
+      availabilityStatus: freelancer.freelancerProfile?.availabilityStatus || "UNAVAILABLE",
+      experienceLevel: freelancer.freelancerProfile?.experienceLevel || "ENTRY",
+      socialLinks: freelancer.freelancerProfile?.socialLinks || {},
+      equipmentCameras: freelancer.freelancerProfile?.equipmentCameras || "",
+      equipmentLenses: freelancer.freelancerProfile?.equipmentLenses || "",
+      equipmentLighting: freelancer.freelancerProfile?.equipmentLighting || "",
+      equipmentOther: freelancer.freelancerProfile?.equipmentOther || "",
+      totalEarnings: freelancer.freelancerProfile?.totalEarnings || 0,
+      rating: freelancer.freelancerProfile?.rating || freelancer.rating || 0,
+      createdAt: freelancer.createdAt,
+      updatedAt: freelancer.updatedAt,
+      software: freelancer.freelancerProfile?.software || [],
+      portfolio: freelancer.freelancerProfile?.portfolioVideos || [], // Renamed to match frontend
+      gigs: freelancer.freelancerProfile?.gigs || [],
+      badges: freelancer.freelancerProfile?.userBadges?.filter((badge) => badge.isVisible) || [],
+    }));
+
+    return res.status(200).json(
+      new ApiResponse(200, {
+        freelancers: formattedFreelancers,
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        totalPages: Math.ceil(total / parseInt(limit)),
+      }, "Freelancers retrieved successfully")
+    );
+  } catch (error) {
+    console.error("Error retrieving freelancers:", error);
+    return next(new ApiError(500, "Failed to retrieve freelancers", error.message));
+  }
+};
+
+// Updated: Get freelancer by ID
+const getFreelancerById = async (req, res, next) => {
+  try {
+    if (!req.user) {
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
+    }
+
+    const { freelancerId } = req.params;
+    const userId = parseInt(freelancerId);
+
+    const freelancer = await prisma.user.findUnique({
+      where: { id: userId, role: "FREELANCER" },
+      select: {
+        id: true,
+        firstname: true,
+        lastname: true,
+        username: true,
+        bio: true,
+        country: true,
+        profilePicture: true,
+        createdAt: true,
+        updatedAt: true,
+        rating: true,
+        freelancerProfile: {
+          select: {
+            city: true,
+            jobTitle: true,
+            overview: true,
+            skills: true,
+            languages: true,
+            tools: true,
+            certifications: true,
+            minimumRate: true,
+            maximumRate: true,
+            hourlyRate: true,
+            weeklyHours: true,
+            availabilityStatus: true,
+            experienceLevel: true,
+            socialLinks: true,
+            equipmentCameras: true,
+            equipmentLenses: true,
+            equipmentLighting: true,
+            equipmentOther: true,
+            totalEarnings: true,
+            rating: true,
+            software: {
+              select: { id: true, name: true, icon: true, level: true },
+            },
+            portfolioVideos: {
+              select: { id: true, title: true, url: true, thumbnail: true },
+            },
+            gigs: {
+              select: { id: true, title: true, price: true, description: true, deliveryTime: true },
+            },
+            userBadges: {
+              select: { id: true, badgeId: true, isVisible: true },
+            },
+          },
+        },
+      },
+    });
+
+    if (!freelancer) {
+      return next(new ApiError(404, "Freelancer not found"));
+    }
+
+    // Format response
+    const formattedFreelancer = {
+      id: freelancer.id,
+      name: `${freelancer.firstname || ""} ${freelancer.lastname || ""}`.trim() || "Unnamed Freelancer",
+      username: freelancer.username || null,
+      bio: freelancer.bio || "",
+      country: freelancer.country || "",
+      city: freelancer.freelancerProfile?.city || "",
+      profilePicture: freelancer.profilePicture || "",
+      jobTitle: freelancer.freelancerProfile?.jobTitle || "",
+      overview: freelancer.freelancerProfile?.overview || "",
+      skills: freelancer.freelancerProfile?.skills || [],
+      languages: freelancer.freelancerProfile?.languages || [],
+      tools: freelancer.freelancerProfile?.tools || [],
+      certifications: freelancer.freelancerProfile?.certifications || [],
+      minimumRate: freelancer.freelancerProfile?.minimumRate || null,
+      maximumRate: freelancer.freelancerProfile?.maximumRate || null,
+      hourlyRate: freelancer.freelancerProfile?.hourlyRate || null,
+      weeklyHours: freelancer.freelancerProfile?.weeklyHours || null,
+      availabilityStatus: freelancer.freelancerProfile?.availabilityStatus || "UNAVAILABLE",
+      experienceLevel: freelancer.freelancerProfile?.experienceLevel || "ENTRY",
+      socialLinks: freelancer.freelancerProfile?.socialLinks || {},
+      equipmentCameras: freelancer.freelancerProfile?.equipmentCameras || "",
+      equipmentLenses: freelancer.freelancerProfile?.equipmentLenses || "",
+      equipmentOther: freelancer.freelancerProfile?.equipmentOther || "",
+      totalEarnings: freelancer.freelancerProfile?.totalEarnings || 0,
+      rating: freelancer.freelancerProfile?.rating || freelancer.rating || 0,
+      createdAt: freelancer.createdAt,
+      updatedAt: freelancer.updatedAt,
+      software: freelancer.freelancerProfile?.software || [],
+      portfolio: freelancer.freelancerProfile?.portfolioVideos || [], // Renamed to match frontend
+      gigs: freelancer.freelancerProfile?.gigs || [],
+      badges: freelancer.freelancerProfile?.userBadges?.filter((badge) => badge.isVisible) || [],
+    };
+
+    return res.status(200).json(
+      new ApiResponse(200, formattedFreelancer, "Freelancer retrieved successfully")
+    );
+  } catch (error) {
+    console.error("Error retrieving freelancer:", error);
+    return next(new ApiError(500, "Failed to retrieve freelancer", error.message));
+  }
+};
+
+export { registerUser, loginUser, getUserProfile, updateUser, deleteItem, deleteUser, getAllBadges, getAllFreelancers, getFreelancerById };

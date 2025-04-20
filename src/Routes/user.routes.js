@@ -7,9 +7,11 @@ import {
   deleteUser,
   deleteItem,
   getAllBadges,
+  getAllFreelancers,
+  getFreelancerById,
 } from "../Controllers/user.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
-import { validateBody } from "../Middlewares/validate.middleware.js";
+import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
 import { uploadSingle } from "../Middlewares/upload.middleware.js";
 import Joi from "joi";
 
@@ -68,6 +70,15 @@ const updateUserSchema = Joi.object({
   experienceLevel: Joi.string().valid("ENTRY", "INTERMEDIATE", "EXPERT").optional(),
 }).min(1);
 
+const freelancerQuerySchema = Joi.object({
+  page: Joi.number().integer().min(1).default(1),
+  limit: Joi.number().integer().min(1).max(100).default(10),
+  search: Joi.string().allow("").optional(),
+  skills: Joi.string().allow("").optional(), // Comma-separated skills
+  location: Joi.string().allow("").optional(), // Country or city
+  experienceLevel: Joi.string().valid("ENTRY", "INTERMEDIATE", "EXPERT", "").allow("").optional(),
+});
+
 // Public routes
 router.post("/register", validateBody(registerUserSchema), registerUser);
 router.post("/login", validateBody(loginUserSchema), loginUser);
@@ -81,5 +92,7 @@ router.patch("/me", uploadSingle("profilePicture"), validateBody(updateUserSchem
 router.delete("/delete", deleteUser);
 router.delete("/me/:type/:id", deleteItem); // Delete specific item (portfolio, services, gigs)
 router.get("/badges", getAllBadges); // Fetch all badges
+router.get("/freelancers", validateQuery(freelancerQuerySchema), getAllFreelancers); // Get all freelancers
+router.get("/freelancers/:freelancerId", getFreelancerById); // Get freelancer by ID
 
 export default router;

@@ -92,6 +92,45 @@ model User {
   applications      Application[]     @relation("FreelancerApplications")
   @@index([email])
 }
+model FreelancerProfile {
+  id                Int       @id @default(autoincrement())
+  userId            Int       @unique @map("user_id")
+  city              String?
+  state             String?
+  pinCode           String?
+  jobTitle          String?
+  overview          String?
+  skills            String[]
+  languages         String[]
+  socialLinks       Json?
+  portfolioVideos   PortfolioVideo[]
+  tools             String[]
+  equipmentCameras  String?
+  equipmentLenses   String?
+  equipmentLighting String?
+  equipmentOther    String?
+  certifications    String[]  @default([])
+  minimumRate       Float?
+  maximumRate       Float?
+  availabilityStatus Availability @default(UNAVAILABLE)
+  weeklyHours       Int?
+  hourlyRate        Float?
+  experienceLevel   ExperienceLevel @default(ENTRY)
+  totalEarnings     Float     @default(0.0)
+  rating            Float     @default(0.0)
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
+  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userBadges        UserBadge[]
+  services          Json?
+  gigs              Gig[]
+  orders            Order[]   @relation("FreelancerOrders")
+  reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
+  paymentSettings   PaymentSetting[]
+  freelancerSkills  FreelancerSkill[]
+  software          FreelancerSoftware[]
+  @@index([userId])
+}
 
 model Application {
   id              Int      @id @default(autoincrement())
@@ -154,46 +193,6 @@ model Job {
   @@index([status])
 }
 
-
-model FreelancerProfile {
-  id                Int       @id @default(autoincrement())
-  userId            Int       @unique @map("user_id")
-  city              String?
-  state             String?
-  pinCode           String?
-  jobTitle          String?
-  overview          String?
-  skills            String[]
-  languages         String[]
-  socialLinks       Json?
-  portfolioVideos   PortfolioVideo[]
-  tools             String[]
-  equipmentCameras  String?
-  equipmentLenses   String?
-  equipmentLighting String?
-  equipmentOther    String?
-  certifications    String[]  @default([])
-  minimumRate       Float?
-  maximumRate       Float?
-  availabilityStatus Availability @default(UNAVAILABLE)
-  weeklyHours       Int?
-  hourlyRate        Float?
-  experienceLevel   ExperienceLevel @default(ENTRY)
-  totalEarnings     Float     @default(0.0)
-  rating            Float     @default(0.0)
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
-  user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  userBadges        UserBadge[]
-  services          Json?
-  gigs              Gig[]
-  orders            Order[]   @relation("FreelancerOrders")
-  reviewsReceived   Review[]  @relation("ReviewsForFreelancer")
-  paymentSettings   PaymentSetting[]
-  freelancerSkills  FreelancerSkill[]
-  software          FreelancerSoftware[]
-  @@index([userId])
-}
 // PortfolioVideo model (Enhanced)
 model PortfolioVideo {
   id           Int       @id @default(autoincrement())
