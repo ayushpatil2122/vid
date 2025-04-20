@@ -49,7 +49,7 @@ app.use(cookieParser());
 
 // Routes declaration
 app.use("/api/v1/users", userRouter);
-app.use("/api/v1/job", jobRouter);
+app.use("/api/v1/jobs", jobRouter);
 app.use("/api/v1/profile", profileRouter);
 app.use("/api/v1/gig", gigRouter);
 app.use("/api/v1/orders", orderRouter);

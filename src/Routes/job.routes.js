@@ -8,8 +8,20 @@ import {
   getAllJobs,
   applyJob,
   checkApplicationStatus,
+  getCurrentJobs,
+  getAppliedJobs,
+  getCompletedJobs,
+  getJobApplications,
+  acceptApplication,
+  rejectApplication,
+  getAllJobsAdmin,
+  verifyJob,
+  unverifyJob,
+  deleteJobAdmin,
+  getAllApplicationsAdmin,
 } from "../Controllers/job.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
+import {restrictTo} from "../Middlewares/restrict.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
 import { uploadSingle } from "../Middlewares/upload.middleware.js";
 import Joi from "joi";
@@ -36,7 +48,7 @@ const jobSchema = Joi.object({
   videoFileUrl: Joi.string().uri().optional(),
 });
 
-const updateJobSchema = jobSchema.fork(Object.keys(jobSchema.describe().keys), field => field.optional()).min(1);
+const updateJobSchema = jobSchema.fork(Object.keys(jobSchema.describe().keys), (field) => field.optional()).min(1);
 
 const getJobsSchema = Joi.object({
   category: Joi.string().optional(),
@@ -45,11 +57,18 @@ const getJobsSchema = Joi.object({
   limit: Joi.number().integer().min(1).max(100).default(20),
 });
 
+const applicationActionSchema = Joi.object({
+  freelancerId: Joi.number().integer().min(1).required(),
+});
+
 // Public routes
 router.get("/all", validateQuery(getJobsSchema), getAllJobs);
+router.get("/current", authenticateToken, getCurrentJobs);
+router.get("/applied", authenticateToken, getAppliedJobs);
+router.get("/completed", authenticateToken, getCompletedJobs);
 router.get("/:jobId", getJob);
 
-// Protected routes
+// Protected routes (Client and Freelancer)
 router.use(authenticateToken);
 router.get("/apply/status/:jobId", checkApplicationStatus);
 router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob);
@@ -59,5 +78,18 @@ router.get("/", validateQuery(getJobsSchema), getClientJobs);
 router.post("/apply/:jobId", validateBody(Joi.object({
   aboutFreelancer: Joi.string().max(5000).required(),
 })), applyJob);
+
+// Client-specific routes (for Shortlist component)
+router.get("/:jobId/applications", restrictTo(["CLIENT"]), getJobApplications);
+router.post("/apply/:jobId/accept", validateBody(applicationActionSchema), restrictTo(["CLIENT"]), acceptApplication);
+router.post("/apply/:jobId/reject", validateBody(applicationActionSchema), restrictTo(["CLIENT"]), rejectApplication);
+
+// Admin routes
+router.use("/admin", authenticateToken, restrictTo(["ADMIN", "SUPERADMIN"]));
+router.get("/admin/jobs", validateQuery(getJobsSchema), getAllJobsAdmin);
+router.put("/admin/jobs/:jobId/verify", restrictTo(["SUPERADMIN"]), verifyJob);
+router.put("/admin/jobs/:jobId/unverify", restrictTo(["SUPERADMIN"]), unverifyJob);
+router.delete("/admin/jobs/:jobId", deleteJobAdmin);
+router.get("/admin/applications", validateQuery(getJobsSchema), getAllApplicationsAdmin);
 
 export default router;

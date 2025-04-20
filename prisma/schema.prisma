@@ -8,6 +8,44 @@ datasource db {
 }
 
 // User model (Enhanced)
+enum Role {
+  FREELANCER
+  CLIENT
+  ADMIN
+}
+
+enum JobStatus {
+  OPEN
+  ACCEPTED
+  IN_PROGRESS
+  COMPLETED
+  CANCELLED
+}
+
+enum JobDifficulty {
+  EASY
+  INTERMEDIATE
+  HARD
+}
+
+enum ProjectLength {
+  SHORT_TERM
+  MEDIUM_TERM
+  LONG_TERM
+}
+
+enum Availability {
+  FULL_TIME
+  PART_TIME
+  UNAVAILABLE
+}
+
+enum ExperienceLevel {
+  ENTRY
+  INTERMEDIATE
+  EXPERT
+}
+
 model User {
   id            Int       @id @default(autoincrement())
   auth0Id       String?   @unique
@@ -41,6 +79,7 @@ model User {
   notifications     Notification[]
   disputesRaised    Dispute[]         @relation("RaisedBy")
   jobs              Job[]             @relation("PostedBy")
+  freelancerJobs    Job[]             @relation("Freelancer")
   OrderStatusHistory OrderStatusHistory[]
   Review            Review[]          @relation("ModeratedBy")
   DisputeEvidence   DisputeEvidence[]
@@ -49,8 +88,9 @@ model User {
   referredReferrals Referral[]        @relation("Referrer")
   receivedReferrals Referral[]        @relation("Referee")
   Promotion         Promotion[]
-  appliedJobsId     Int[]
+  appliedJobsId     Int[]             @map("applied_jobs_id")
   applications      Application[]     @relation("FreelancerApplications")
+  @@index([email])
 }
 
 model Application {
@@ -58,22 +98,26 @@ model Application {
   jobId           Int
   freelancerId    Int
   aboutFreelancer String
+  status          String   @default("PENDING") // PENDING, ACCEPTED, REJECTED
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
   job             Job      @relation(fields: [jobId], references: [id])
   freelancer      User     @relation("FreelancerApplications", fields: [freelancerId], references: [id])
+  @@unique([jobId, freelancerId])
+  @@index([freelancerId])
 }
 
-// Role Enum
-enum Role {
-  FREELANCER
-  CLIENT
-  ADMIN
+model Milestone {
+  id        Int      @id @default(autoincrement())
+  jobId     Int
+  name      String
+  deadline  DateTime
+  completed Boolean  @default(false)
+  job       Job      @relation(fields: [jobId], references: [id], onDelete: Cascade)
 }
 
-// Job model (Unchanged)
 model Job {
-  id                Int       @id @default(autoincrement())
+  id                Int            @id @default(autoincrement())
   title             String
   description       String
   category          String[]
@@ -86,36 +130,31 @@ model Job {
   requiredSkills    String[]
   tools             String[]
   scope             String
-  postedById        Int       @map("posted_by_id")
+  postedById        Int            @map("posted_by_id")
+  freelancerId      Int?           @map("freelancer_id")
+  status            JobStatus      @default(OPEN)
+  progress          Int            @default(0)
   name              String
   email             String
   company           String?
   note              String?
   videoFileUrl      String?
-  postedTime        DateTime  @default(now())
-  isVerified        Boolean   @default(true)
-  location          String    @default("Remote")
-  proposals         Int       @default(0)
-  categoryColor     String    @default("blue")
-  createdAt         DateTime  @default(now())
-  updatedAt         DateTime  @default(now()) @updatedAt
-  postedBy          User      @relation("PostedBy", fields: [postedById], references: [id], onDelete: Cascade)
+  rating            Float?         // For client feedback on completed jobs
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @default(now()) @updatedAt
+  isVerified        Boolean        @default(false) // Require admin verification
+  location          String         @default("Remote")
+  proposals         Int            @default(0)
+  postedBy          User           @relation("PostedBy", fields: [postedById], references: [id], onDelete: Cascade)
+  freelancer        User?          @relation("Freelancer", fields: [freelancerId], references: [id], onDelete: SetNull)
   applications      Application[]
+  milestones        Milestone[]    // Relation for milestones
+  @@index([postedById])
+  @@index([freelancerId])
+  @@index([status])
 }
 
-enum JobDifficulty {
-  EASY
-  INTERMEDIATE
-  HARD
-}
 
-enum ProjectLength {
-  SHORT_TERM
-  MEDIUM_TERM
-  LONG_TERM
-}
-
-// FreelancerProfile model (Enhanced)
 model FreelancerProfile {
   id                Int       @id @default(autoincrement())
   userId            Int       @unique @map("user_id")
@@ -142,8 +181,8 @@ model FreelancerProfile {
   experienceLevel   ExperienceLevel @default(ENTRY)
   totalEarnings     Float     @default(0.0)
   rating            Float     @default(0.0)
-  createdAt         DateTime  @default(now())  // Added
-  updatedAt         DateTime  @default(now()) @updatedAt  // Added
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @default(now()) @updatedAt
   user              User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   userBadges        UserBadge[]
   services          Json?
@@ -153,20 +192,8 @@ model FreelancerProfile {
   paymentSettings   PaymentSetting[]
   freelancerSkills  FreelancerSkill[]
   software          FreelancerSoftware[]
+  @@index([userId])
 }
-
-enum Availability {
-  FULL_TIME
-  PART_TIME
-  UNAVAILABLE
-}
-
-enum ExperienceLevel {
-  ENTRY
-  INTERMEDIATE
-  EXPERT
-}
-
 // PortfolioVideo model (Enhanced)
 model PortfolioVideo {
   id           Int       @id @default(autoincrement())
