@@ -21,6 +21,8 @@ import { errorHandler } from "./Middlewares/error.middleware.js";
 import freelancerRoutes from "./Routes/freelancer.routes.js";
 import portfolioRoutes from "./Routes/portfolio.routes.js";
 import contactRoutes from "./Routes/contact.routes.js"
+import { authenticateToken } from "./Middlewares/protect.middleware.js";
+import prisma from "./prismaClient.js";
 
 const app = express();
 
@@ -68,8 +70,79 @@ app.use("/api/v1/portfolio", portfolioRoutes);
 app.use("/api/v1/contact", contactRoutes);
 
 
+app.get("/api/v1/client/jobs", authenticateToken, async(req, res) => {
+  const clientId = req.user.id
+  const jobs = await prisma.job.findMany({
+    where : {
+      postedById : clientId
+    }
+  })
 
-app.use(errorHandler)
+  return res.json(jobs)
+})
+
+
+app.get('/api/v1/jobs/applications/:jobId', async (req, res) => {
+  try {
+    const jobId = parseInt(req.params.jobId);
+    const job = await prisma.job.findUnique({
+      where: { id: jobId },
+      select: { postedById: true }
+    });
+    
+    if (!job) {
+      return res.status(404).json({ message: 'Job not found' });
+    }
+    
+    if (req.user.role !== 'ADMIN' && job.postedById !== req.user.id) {
+      return res.status(403).json({ message: 'Unauthorized to view these applications' });
+    }
+    const applications = await prisma.application.findMany({
+      where: { jobId },
+      include: {
+        freelancer: {
+          select: {
+            id: true,
+            firstname: true,
+            lastname: true,
+            username: true,
+            profilePicture: true,
+            rating: true,
+            totalJobs: true,
+            successRate: true,
+            freelancerProfile: {
+              select: {
+                jobTitle: true,
+                experienceLevel: true,
+                skills: true,
+                totalEarnings: true,
+                hourlyRate: true,
+                rating: true
+              }
+            }
+          }
+        }
+      },
+      orderBy: { createdAt: 'desc' }
+    });
+    
+    return res.status(200).json({
+      success: true,
+      count: applications.length,
+      data: applications
+    });
+    
+  } catch (error) {
+    console.error('Error fetching applications by job ID:', error);
+    return res.status(500).json({ 
+      message: 'Server error while fetching applications',
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
+  }
+});
+
+
+app.use  (errorHandler)
 
 
 export { app };

@@ -1,4 +1,4 @@
-// src/middlewares/restrict.middleware.js
+
 import { ApiError } from "../Utils/ApiError.js";
 
 /**
@@ -8,19 +8,53 @@ import { ApiError } from "../Utils/ApiError.js";
  */
 const restrictTo = (...roles) => {
   return (req, res, next) => {
-    // Ensure user is authenticated and has a role
-    if (!req.user || !req.user.role) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated or role missing"));
+    // Validate user and role
+    if (!req.user || typeof req.user !== 'object') {
+      console.error('[restrictTo] No user object in request:', req.user);
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
     }
+
+    const userRole = req.user.role?.trim();
+    if (!userRole || typeof userRole !== 'string') {
+      console.error('[restrictTo] Invalid or missing user role:', req.user);
+      return next(new ApiError(401, "Unauthorized: User role missing or invalid"));
+    }
+
+    // Flatten and validate roles
+    const flatRoles = roles.flat(Infinity).filter(role => typeof role === 'string' && role.trim() !== '');
+    if (flatRoles.length === 0) {
+      console.error('[restrictTo] No valid roles provided:', roles);
+      return next(new ApiError(500, "Server error: No valid roles specified"));
+    }
+
+    // Normalize roles for case-insensitive comparison
+    const normalizedRoles = flatRoles.map(role => role.trim().toUpperCase());
+
+    console.log('[restrictTo] Checking role:', {
+      userRole,
+      normalizedUserRole: userRole.toUpperCase(),
+      requiredRoles: normalizedRoles,
+      rawRoles: roles,
+      path: `${req.method} ${req.path}`,
+      userId: req.user.id
+    });
 
     // Check if user's role is allowed
-    if (!roles.includes(req.user.role)) {
-      return next(new ApiError(403, `Forbidden: Role '${req.user.role}' does not have permission. Required roles: ${roles.join(", ")}`));
+    if (!normalizedRoles.includes(userRole.toUpperCase())) {
+      console.error('[restrictTo] Role check failed:', {
+        userRole,
+        normalizedUserRole: userRole.toUpperCase(),
+        requiredRoles: normalizedRoles
+      });
+      return next(
+        new ApiError(
+          403,
+          `Forbidden: Role '${userRole}' does not have permission. Required roles: ${normalizedRoles.join(", ")}`
+        )
+      );
     }
 
-    // Log access for auditing (optional for large-scale systems)
-    console.log(`User ${req.user.id} with role ${req.user.role} accessed restricted route: ${req.method} ${req.path}`);
-
+    console.log('[restrictTo] Role check passed for user:', req.user.id);
     next();
   };
 };
@@ -32,16 +66,69 @@ const restrictTo = (...roles) => {
  */
 const restrictToAny = (roleSets) => {
   return (req, res, next) => {
-    if (!req.user || !req.user.role) {
-      return next(new ApiError(401, "Unauthorized: User not authenticated or role missing"));
+    // Validate user and role
+    if (!req.user || typeof req.user !== 'object') {
+      console.error('[restrictToAny] No user object in request:', req.user);
+      return next(new ApiError(401, "Unauthorized: User not authenticated"));
     }
 
-    const hasPermission = roleSets.some(set => set.includes(req.user.role));
+    const userRole = req.user.role?.trim();
+    if (!userRole || typeof userRole !== 'string') {
+      console.error('[restrictToAny] Invalid or missing user role:', req.user);
+      return next(new ApiError(401, "Unauthorized: User role missing or invalid"));
+    }
+
+    // Validate roleSets
+    if (!Array.isArray(roleSets) || roleSets.length === 0) {
+      console.error('[restrictToAny] Invalid roleSets:', roleSets);
+      return next(new ApiError(500, "Server error: Invalid role sets configuration"));
+    }
+
+    // Flatten and normalize role sets
+    const normalizedRoleSets = roleSets
+      .map(set => {
+        if (!Array.isArray(set)) {
+          console.warn('[restrictToAny] Invalid role set:', set);
+          return [];
+        }
+        return set
+          .flat(Infinity)
+          .filter(role => typeof role === 'string' && role.trim() !== '')
+          .map(role => role.trim().toUpperCase());
+      })
+      .filter(set => set.length > 0);
+
+    if (normalizedRoleSets.length === 0) {
+      console.error('[restrictToAny] No valid role sets provided:', roleSets);
+      return next(new ApiError(500, "Server error: No valid role sets specified"));
+    }
+
+    console.log('[restrictToAny] Checking role sets:', {
+      userRole,
+      normalizedUserRole: userRole.toUpperCase(),
+      requiredRoleSets: normalizedRoleSets,
+      rawRoleSets: roleSets,
+      path: `${req.method} ${req.path}`,
+      userId: req.user.id
+    });
+
+    // Check if user role matches any role set
+    const hasPermission = normalizedRoleSets.some(set => set.includes(userRole.toUpperCase()));
     if (!hasPermission) {
-      return next(new ApiError(403, `Forbidden: Role '${req.user.role}' does not match any allowed role sets: ${JSON.stringify(roleSets)}`));
+      console.error('[restrictToAny] Role set check failed:', {
+        userRole,
+        normalizedUserRole: userRole.toUpperCase(),
+        requiredRoleSets: normalizedRoleSets
+      });
+      return next(
+        new ApiError(
+          403,
+          `Forbidden: Role '${userRole}' does not match any allowed role sets: ${JSON.stringify(normalizedRoleSets)}`
+        )
+      );
     }
 
-    console.log(`User ${req.user.id} with role ${req.user.role} accessed advanced restricted route: ${req.method} ${req.path}`);
+    console.log('[restrictToAny] Role set check passed for user:', req.user.id);
     next();
   };
 };

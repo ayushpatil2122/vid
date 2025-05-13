@@ -1,3 +1,4 @@
+
 import express from "express";
 import {
   createJob,
@@ -21,13 +22,14 @@ import {
   getAllApplicationsAdmin,
 } from "../Controllers/job.controller.js";
 import { authenticateToken } from "../Middlewares/protect.middleware.js";
-import {restrictTo} from "../Middlewares/restrict.middleware.js";
+import { restrictTo } from "../Middlewares/restrict.middleware.js";
 import { validateBody, validateQuery } from "../Middlewares/validate.middleware.js";
 import { uploadSingle } from "../Middlewares/upload.middleware.js";
 import Joi from "joi";
 
 const router = express.Router();
 
+// Joi schemas for validation
 const jobSchema = Joi.object({
   title: Joi.string().max(100).required().messages({ "string.max": "Title must be 100 characters or less" }),
   description: Joi.string().max(5000).required().messages({ "string.max": "Description must be 5000 characters or less" }),
@@ -62,34 +64,35 @@ const applicationActionSchema = Joi.object({
 });
 
 // Public routes
-router.get("/all", validateQuery(getJobsSchema), getAllJobs);
-router.get("/current", authenticateToken, getCurrentJobs);
-router.get("/applied", authenticateToken, getAppliedJobs);
-router.get("/completed", authenticateToken, getCompletedJobs);
-router.get("/:jobId", getJob);
+router.get("/all", validateQuery(getJobsSchema), getAllJobs); // GET /api/v1/all
+router.get("/current", authenticateToken, getCurrentJobs); // GET /api/v1/current
+router.get("/applied", authenticateToken, getAppliedJobs); // GET /api/v1/applied
+router.get("/completed", authenticateToken, getCompletedJobs); // GET /api/v1/completed
+router.get("/:jobId", getJob); // GET /api/v1/:jobId
 
-// Protected routes (Client and Freelancer)
+// Protected routes (require authentication)
 router.use(authenticateToken);
-router.get("/apply/status/:jobId", checkApplicationStatus);
-router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob);
-router.put("/:jobId", uploadSingle("videoFile"), validateBody(updateJobSchema), updateJob);
-router.delete("/:jobId", deleteJob);
-router.get("/", validateQuery(getJobsSchema), getClientJobs);
+router.get("/apply/status/:jobId", checkApplicationStatus); // GET /api/v1/apply/status/:jobId
+router.post("/", uploadSingle("videoFile"), validateBody(jobSchema), createJob); // POST /api/v1/
+router.put("/:jobId", uploadSingle("videoFile"), validateBody(updateJobSchema), updateJob); // PUT /api/v1/:jobId
+router.delete("/:jobId", deleteJob); // DELETE /api/v1/:jobId
+router.get("/", validateQuery(getJobsSchema), getClientJobs); // GET /api/v1/
 router.post("/apply/:jobId", validateBody(Joi.object({
   aboutFreelancer: Joi.string().max(5000).required(),
-})), applyJob);
+})), applyJob); // POST /api/v1/apply/:jobId
 
 // Client-specific routes (for Shortlist component)
-router.get("/:jobId/applications", restrictTo(["CLIENT"]), getJobApplications);
-router.post("/apply/:jobId/accept", validateBody(applicationActionSchema), restrictTo(["CLIENT"]), acceptApplication);
-router.post("/apply/:jobId/reject", validateBody(applicationActionSchema), restrictTo(["CLIENT"]), rejectApplication);
+router.get("/:jobId/applications", restrictTo(["CLIENT"]), getJobApplications); // GET /api/v1/:jobId/applications
+router.get('/:jobId/applications', authenticateToken, restrictTo('CLIENT'), getJobApplications);
+router.post('/:jobId/apply/accept',authenticateToken,validateBody(applicationActionSchema),restrictTo('CLIENT'),acceptApplication);
+router.post('/:jobId/apply/reject',authenticateToken,validateBody(applicationActionSchema),restrictTo('CLIENT'),rejectApplication);
 
 // Admin routes
-router.use("/admin", authenticateToken, restrictTo(["ADMIN", "SUPERADMIN"]));
-router.get("/admin/jobs", validateQuery(getJobsSchema), getAllJobsAdmin);
-router.put("/admin/jobs/:jobId/verify", restrictTo(["SUPERADMIN"]), verifyJob);
-router.put("/admin/jobs/:jobId/unverify", restrictTo(["SUPERADMIN"]), unverifyJob);
-router.delete("/admin/jobs/:jobId", deleteJobAdmin);
-router.get("/admin/applications", validateQuery(getJobsSchema), getAllApplicationsAdmin);
+router.use("/admin", restrictTo(["ADMIN", "SUPERADMIN"]));
+router.get("/admin/jobs", validateQuery(getJobsSchema), getAllJobsAdmin); // GET /api/v1/admin/jobs
+router.put("/admin/jobs/:jobId/verify", restrictTo(["SUPERADMIN"]), verifyJob); // PUT /api/v1/admin/jobs/:jobId/verify
+router.put("/admin/jobs/:jobId/unverify", restrictTo(["SUPERADMIN"]), unverifyJob); // PUT /api/v1/admin/jobs/:jobId/unverify
+router.delete("/admin/jobs/:jobId", deleteJobAdmin); // DELETE /api/v1/admin/jobs/:jobId
+router.get("/admin/applications", validateQuery(getJobsSchema), getAllApplicationsAdmin); // GET /api/v1/admin/applications
 
 export default router;
