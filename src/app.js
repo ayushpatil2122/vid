@@ -141,6 +141,27 @@ app.get('/api/v1/jobs/applications/:jobId', async (req, res) => {
   }
 });
 
+app.get('/api/v1/users/:freelancerId', async (req, res) => {
+  try {
+    const id = parseInt(req.params.freelancerId);
+
+  
+
+    const freelancer = await prisma.user.findUnique({
+      where: { id },
+    });
+
+    if (!freelancer) {
+      return res.status(404).json({ error: "Freelancer not found" });
+    }
+
+    return res.json(freelancer);
+  } catch (error) {
+    console.error("Error fetching freelancer:", error);
+    return res.status(500).json({ error: "Internal server error" });
+  }
+});
+
 
 app.use  (errorHandler)
 
